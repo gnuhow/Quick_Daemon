@@ -34,11 +34,6 @@ import ttk
 import tkFileDialog
 import datetime
 
-import BaseHTTPServer, SimpleHTTPServer
-import ssl 
-
-server_ip=10.5.3.10
-
 def save_snmp():
         dd='snmp_log'+str(datetime.datetime.today())
         print dd
@@ -55,6 +50,7 @@ def clear_snmp():
         print "clear_snmp"
 
 def sagent():
+
         ########### INITALIZE THE TTK GUI with frames and NB ###################
         # Root --> frame --> widgets
         root=Tkinter.Tk()
@@ -77,27 +73,21 @@ def sagent():
         ttk.Style().configure("TButton", padding=6, 
             relief="flat", background="#ccc")
         
-        '''
         lbl1=ttk.Label(ftop,text='TOP')
         lbl1.grid(column=0,row=0)
 
         lbl2=ttk.Label(fleft,text='LEFT')
         lbl2.grid(column=0,row=0)
 
-        lbl3=ttk.Label(fright,text='RIGHT')
-        lbl3.grid(column=0,row=0)
-        '''
+        #lbl3=ttk.Label(fright,text='RIGHT')
+        #lbl3.grid(column=0,row=0)
 
         nb=ttk.Notebook(fright)
         nb.grid(column=0,row=0,sticky='NW')
 
+        
         fsnmp=ttk.Frame(nb)
         fex=ttk.Frame(nb)
-
-        ############## HTTPS Server Frame ##################
-        fhttp=ttk.Frame(nb)
-        flog.grid(column=0,row=0,padx=20,pady=20,sticky='NW')
-
 
         ############## SNMP FRAME ################
         flog=ttk.Frame(nb)
@@ -122,7 +112,9 @@ def sagent():
         logs.insert(Tkinter.INSERT, "Security is great!")
         print logs
 
-
+        ############## HTTPS Server Frame ##################
+        fhttp=ttk.Frame(nb)
+        flog.grid(column=0,row=0,padx=20,pady=20,sticky='NW')
 
 
         ############## Punchout EVERYTHING #################
@@ -140,13 +132,48 @@ def sagent():
 
         #nb.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
 
+        '''
+        style.configure("BW.TLabel", foreground="black", background="white")
+
+        style = ttk.Style()
+        
+        # This is a separator fool
+        # left_sep=ttk.Separator(root, orient='vertical')
+
+        # This is a Frame + Label
+        # lf=ttk.Labelframe(root, text='Label')
+
+        # This is a notebook.
+        n = ttk.Notebook(root)
+        f1 = ttk.Frame(n); # first page, which would get widgets gridded into it
+        f2 = ttk.Frame(n); # second page
+        n.add(f1, text='One')
+        n.add(f2, text='Two')
+
+        style.map("C.TButton",
+            foreground=[('pressed', 'red'), ('active', 'blue')], \
+            background=[('pressed', '!disabled', 'black'), ('active', 'white')] 
+            )
+        colored_btn = ttk.Button(text="Test", style="C.TButton").pack(fright)
+        '''
+
         root.mainloop()
 
+'''
+    # Not using kivy. It doesnt work well with other frameworks.
+    from kivy.app import App
+    from kivy.uix.button import Button
 
+    kivy.require('1.8.0')
+
+    class sagent(App):
+        def build(self):
+            return Button(text='Hello World')
+                
+    sagent().run()
+'''
 def https_server():
-    httpd=BaseHTTPServer.HTTPServer(('server_ip', 443), SimpleHTTPServer.SimpleHTTPRequestHandler)
-    httpd.socket=ssl.wrap_socket(httpd.socket, certfile='./server.pem', server_side=True)
-    httpd.serve_forever() 
+    print "https!"
 
 
 ####### The SNMP Agent Daemon #######
