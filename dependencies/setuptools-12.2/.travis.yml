@@ -1,0 +1,15 @@
+language: python
+python:
+  - 2.6
+  - 2.7
+  - 3.2
+  - 3.3
+  - 3.4
+  - pypy
+# command to run tests
+script:
+ # update egg_info based on setup.py in checkout
+ - python bootstrap.py
+
+ - python setup.py ptr --addopts='-rs'
+ - python ez_setup.py --version 10.2.1

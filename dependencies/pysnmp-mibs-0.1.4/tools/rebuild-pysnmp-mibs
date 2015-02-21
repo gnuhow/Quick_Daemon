@@ -1,0 +1,66 @@
+#!/bin/bash
+#
+# Re-build PySNMP MIB/managed objects from MIB text files.
+# See http://pysnmp.sf.net for more information.
+#
+
+build_pysnmp_mib=build-pysnmp-mib  # part of pysnmp distro
+
+while getopts s:d: o
+  do case "$o" in
+  s) sourceDirs="$sourceDirs $OPTARG"; ;;
+  d) destDir="$OPTARG";;
+  [?]) echo >&2 "\
+Re-build PySNMP MIB/managed objects from MIB text files, http://pysnmp.sf.net.
+Usage: $0 [ -s mib-text-dir ] -d pysnmp-mib-rebuild-dir\
+"
+  exit 1;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+[ -z "$destDir" ] && { 
+    echo >&2 "Re-build directory not specified"; 
+    exit 1;
+}
+
+[ $# -gt 0 ] && { echo >&2 "Extra arguments given"; exit 1; }
+
+[ -z "$sourceDirs" ] && { 
+    sourceDirs="/usr/local/share/snmp /usr/local/share/mibs /usr/share/snmp /usr/share/mibs /usr/share/snmp/mibs /usr/local/share/mibs/iana"; 
+}
+
+for m in $sourceDirs; do
+  if [ -z "$SMIPATH" ]
+  then
+    SMIPATH="$m"
+  else
+    SMIPATH=$SMIPATH:$m
+  fi
+done
+
+export SMIPATH
+
+for origFile in $destDir/*.py; do
+    [ ! -f $origFile ] && {
+        continue; 
+    }
+    mibName=$(echo $origFile | sed -e 's/.*\/\(.*\)\.py/\1/g') || {
+        echo >&2 "cant get MIB name from $origFile";
+        continue;
+    }
+    mibPath=$(find $sourceDirs -name "$mibName" -o -name "$mibName.txt" -o -name "$mibName.mib" 2>/dev/null | head -1)
+    [ -z $mibPath ] && { 
+        echo >&2 "Missing MIB source for $origFile";
+        continue;
+    }
+
+    pyMibPath=$destDir/$mibName.py
+
+    $build_pysnmp_mib -o $pyMibPath $mibPath || {
+        echo >&2 "$build_pysnmp_mib failed";
+        exit 1;
+    }
+    echo "$mibPath --> $pyMibPath"
+done

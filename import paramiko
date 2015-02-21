@@ -1,0 +1,18 @@
+import paramiko
+
+hostname='10.5.3.12'
+username='root'
+password="1234qwer"
+
+
+ssh_client = paramiko.SSHClient()
+ssh_client.connect(hostname, username=username, key_filename=key_filename, password=password)
+
+filename 
+
+with closing(Write(ssh_client.get_transport(), '.')) as scp:
+    scp.send_file('file.txt', True)
+    scp.send_file('../../test.log', remote_filename='baz.log')
+
+    s = StringIO('this is a test')
+    scp.send(s, 'test', '0601', len(s.getvalue()))

@@ -1,0 +1,10 @@
+Metadata-Version: 1.0
+Name: scp
+Version: 0.8.0
+Summary: scp module for paramiko
+Home-page: https://github.com/jbardin/scp.py.git
+Author: James Bardin
+Author-email: j.bardin@gmail.com
+License: LGPL
+Description: UNKNOWN
+Platform: UNKNOWN

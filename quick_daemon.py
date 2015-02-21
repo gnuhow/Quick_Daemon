@@ -34,6 +34,12 @@ import ttk
 import tkFileDialog
 import datetime
 
+import multiprocessing
+import BaseHTTPServer, SimpleHTTPServer
+import ssl
+import os
+import paramiko
+
 def save_snmp():
         dd='snmp_log'+str(datetime.datetime.today())
         print dd
@@ -49,137 +55,21 @@ def open_snmp():
 def clear_snmp():
         print "clear_snmp"
 
-def sagent():
-
-        ########### INITALIZE THE TTK GUI with frames and NB ###################
-        # Root --> frame --> widgets
-        root=Tkinter.Tk()
-        root.title('Soft Serve IT')
-        #root.grid(column=0,row=0,columnspan=2,rowspan=2)
-        fmain=ttk.Frame(root,height=1000,width=1000)
-        fmain.grid(sticky="NW")
-        ftop=ttk.Frame(fmain,height=100)
-        ftop.grid(column=0,row=0,columnspan=2,rowspan=1,sticky="N")
-        fleft=ttk.Frame(fmain,width=500)
-        fleft.grid(column=0,row=1,columnspan=1,rowspan=1,sticky="NW")
-        fright=ttk.Frame(fmain,width=2000)
-        fright.grid(column=1,row=1,columnspan=1,rowspan=1,sticky="NW")
-
-        #ftop.pack(side=Tkinter.TOP,expand=False,fill=Tkinter.X)
-        #fleft.pack(side=Tkinter.LEFT,expand=False,fill=Tkinter.Y)
-        #fright.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
-
-        style=ttk.Style()
-        ttk.Style().configure("TButton", padding=6, 
-            relief="flat", background="#ccc")
-        
-        lbl1=ttk.Label(ftop,text='TOP')
-        lbl1.grid(column=0,row=0)
-
-        lbl2=ttk.Label(fleft,text='LEFT')
-        lbl2.grid(column=0,row=0)
-
-        #lbl3=ttk.Label(fright,text='RIGHT')
-        #lbl3.grid(column=0,row=0)
-
-        nb=ttk.Notebook(fright)
-        nb.grid(column=0,row=0,sticky='NW')
-
-        
-        fsnmp=ttk.Frame(nb)
-        fex=ttk.Frame(nb)
-
-        ############## SNMP FRAME ################
-        flog=ttk.Frame(nb)
-        flog.grid(column=0,row=0,padx=20,pady=20,sticky='NW')
-
-        btn_save=ttk.Button(flog,text='Save',command=save_snmp)
-        #btn_save.pack(side=Tkinter.LEFT)
-        btn_save.grid(column=0,row=0,columnspan=1,rowspan=1)
-
-        btn_open=ttk.Button(flog,text='Open',command=open_snmp)
-        btn_open.grid(column=1,row=0,columnspan=1,rowspan=1)
-        #btn_open.pack(side=Tkinter.LEFT)
-
-        btn_clear=ttk.Button(flog,text='Clear',command=clear_snmp)
-        btn_clear.grid(column=2,row=0,columnspan=1,rowspan=1)
-        #btn_clear.pack(side=Tkinter.LEFT)
-
-        logs=Tkinter.Text(flog, width=100,height=100,yscrollcommand=True,wrap=Tkinter.WORD)
-        logs.grid(column=0,row=1,columnspan=7)
-
-        # Instert text example.
-        logs.insert(Tkinter.INSERT, "Security is great!")
-        print logs
-
-        ############## HTTPS Server Frame ##################
-        fhttp=ttk.Frame(nb)
-        flog.grid(column=0,row=0,padx=20,pady=20,sticky='NW')
 
 
-        ############## Punchout EVERYTHING #################
-        nb.add(fhttp,text='Easy HTTPS')
-        nb.add(flog,text='SNMP Logs')
-        nb.add(fsnmp,text='Configure SNMPv3')
-        nb.add(fex,text='Examples')
+# Https server. Allows file download upload to the root program folder.
 
-        fright.columnconfigure(0, weight=1)
-        fright.rowconfigure(0, weight=1)
-        nb.columnconfigure(0, weight=1)
-        nb.rowconfigure(0, weight=1)
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
+# Generate a new server cert:
+# openssl req -new -x509 -keyout server.pem -out server.pem -days 365 -nodes
 
-        #nb.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
+# Verify the server cert:
+# openssl x509 -in certificate.crt -text -noout
 
-        '''
-        style.configure("BW.TLabel", foreground="black", background="white")
-
-        style = ttk.Style()
-        
-        # This is a separator fool
-        # left_sep=ttk.Separator(root, orient='vertical')
-
-        # This is a Frame + Label
-        # lf=ttk.Labelframe(root, text='Label')
-
-        # This is a notebook.
-        n = ttk.Notebook(root)
-        f1 = ttk.Frame(n); # first page, which would get widgets gridded into it
-        f2 = ttk.Frame(n); # second page
-        n.add(f1, text='One')
-        n.add(f2, text='Two')
-
-        style.map("C.TButton",
-            foreground=[('pressed', 'red'), ('active', 'blue')], \
-            background=[('pressed', '!disabled', 'black'), ('active', 'white')] 
-            )
-        colored_btn = ttk.Button(text="Test", style="C.TButton").pack(fright)
-        '''
-
-        root.mainloop()
-
-'''
-    # Not using kivy. It doesnt work well with other frameworks.
-    from kivy.app import App
-    from kivy.uix.button import Button
-
-    kivy.require('1.8.0')
-
-    class sagent(App):
-        def build(self):
-            return Button(text='Hello World')
-                
-    sagent().run()
-'''
-def https_server():
-    print "https!"
 
 
 ####### The SNMP Agent Daemon #######
-
 def agent(
-    server_ip='127.0.0.1',
+    server_ip,
     server_port='162',
     snmp_ver='3',
     community='comm1',
@@ -206,15 +96,14 @@ def agent(
         udp.UdpTransport().openServerMode((server_ip, server_port))
     )
 
-    ############# SNMP VERSION ONE/TWO ###########################
+    ########################## SNMP VERSION ONE/TWO ###########################
     if snmp_ver=='1':
         config.CommunityData(community, 1)
 
     if snmp_ver=='2':
         config.CommunityData(community, 2)
 
-
-    ############## SNMP VERSION THREE IF TREE ################
+    ######################### SNMP VERSION THREE IF TREE ######################
     if snmp_ver=='3' and authpriv=='00':
         config.addV3User(
              snmpEngine, user3,
@@ -234,10 +123,10 @@ def agent(
             config.addV3User(
                 snmpEngine,user3,
                 config.usmHMACSHAAuthProtocol, authkey3,
-                config.NoAuthProtocol )
+                config.NoAuthProtocol)
 
 
-    ######## SNMPV3 WITH MD5 AUTH AND PRIV ########
+    ############## SNMPV3 WITH MD5 AUTH AND PRIV ###############
     if snmp_ver=='3' and authpriv=='11':
         if v3auth=='md5' and v3priv=='des':
             config.addV3User(
@@ -312,16 +201,16 @@ def agent(
             )
 
     # Callback function for receiving notifications
-    def cbFun(snmpEngine,
+    def cbFun(self,snmpEngine,
         stateReference,
         contextEngineId, contextName,
         varBinds,cbCtx):
     
-        snmpout=open()
-        snmpout.write('Notification received, ContextEngineId "%s", ContextName "%s"' % (
-            contextEngineId.prettyPrint(), contextName.prettyPrint()))
+        global snmpout
+        snmpout='Notification received, ContextEngineId "%s", ContextName "%s"' % (
+            contextEngineId.prettyPrint(), contextName.prettyPrint())
         for name, val in varBinds:
-            snmpout.write('%s = %s' % (name.prettyPrint(), val.prettyPrint()))
+            snmpout=self.snmpout+'%s = %s' % (name.prettyPrint(), val.prettyPrint())
 
     # Register SNMP Application at the SNMP engine
     ntfrcv.NotificationReceiver(snmpEngine, cbFun)
@@ -332,17 +221,164 @@ def agent(
     # Run I/O dispatcher which would receive queries and send confirmations
     try:
         snmpEngine.transportDispatcher.runDispatcher()
+        return snmpout
     except:
+        print snmpout
         snmpEngine.transportDispatcher.closeDispatcher()
     raise
 
+def startagent():
+    child_agent, parent_agent=multiprocessing.Pipe()
+    agent.multiprocessing.Process(target=agent,args=(agent(server_ip,
+        server_port='162',
+        snmp_ver='3',
+        community='comm1',
+        authpriv='11',
+        v3auth='sha',
+        v3priv='aes128',
+        user3='user1',
+        authkey3='authkey1',
+        privkey3='privkey1',
+        engineid3='8000000001020304'
+        )))
+    agent.start()
+    agent.join()
+    debug.setLogger(debug.Debug('all'))
+
+def stopagent():
+    agent.terminate()
+
+def gui():
+        ########### INITALIZE THE TTK GUI with frames and NB ###################
+        # Root --> frame --> widgets
+        root=Tkinter.Tk()
+        root.title('Quick Daemon')
+        #root.grid(column=0,row=0,columnspan=2,rowspan=2)
+        fmain=ttk.Frame(root,height=1000,width=1000)
+        fmain.grid(sticky="NW")
+        ftop=ttk.Frame(fmain,height=100)
+        ftop.grid(column=0,row=0,columnspan=2,rowspan=1,sticky="N")
+        fleft=ttk.Frame(fmain,width=500)
+        fleft.grid(column=0,row=1,columnspan=1,rowspan=1,sticky="NW")
+        fright=ttk.Frame(fmain,width=2000)
+        fright.grid(column=1,row=1,columnspan=1,rowspan=1,sticky="NW")
+
+        #ftop.pack(side=Tkinter.TOP,expand=False,fill=Tkinter.X)
+        #fleft.pack(side=Tkinter.LEFT,expand=False,fill=Tkinter.Y)
+        #fright.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
+
+        style=ttk.Style()
+        ttk.Style().configure("TButton", padding=6, 
+            relief="flat", background="#ccc")
+        
+        lbl1=ttk.Label(ftop,text='TOP')
+        lbl1.grid(column=0,row=0)
+
+        lbl2=ttk.Label(fleft,text='LEFT')
+        lbl2.grid(column=0,row=0)
+
+        #lbl3=ttk.Label(fright,text='RIGHT')
+        #lbl3.grid(column=0,row=0)
+
+        nb=ttk.Notebook(fright)
+        nb.grid(column=0,row=0,sticky='NW')
+
+        
+        fsnmp=ttk.Frame(nb)
+        fex=ttk.Frame(nb)
+
+        ############## HTTPS Server Frame ##################
+        fhttp=ttk.Frame(nb)
+        flog.grid(column=0,row=0,padx=20,pady=20,sticky='NW')
+
+
+        ############## SNMP LOG FRAME ################
+        flog=ttk.Frame(nb)
+        flog.grid(column=0,row=0,padx=20,pady=20,sticky='NW')
+
+        btn_save=ttk.Button(flog,text='Save',command=save_snmp)
+        #btn_save.pack(side=Tkinter.LEFT)
+        btn_save.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NW')
+
+        btn_open=ttk.Button(flog,text='Open',command=open_snmp)
+        btn_open.grid(column=1,row=0,columnspan=1,rowspan=1,sticky='NW')
+        #btn_open.pack(side=Tkinter.LEFT)
+
+        btn_clear=ttk.Button(flog,text='Clear',command=clear_snmp)
+        btn_clear.grid(column=2,row=0,columnspan=1,rowspan=1,sticky='NW')
+        #btn_clear.pack(side=Tkinter.LEFT)
+
+        btn_start=ttk.Button(flog,text='Start SNMPv3',command=agent)
+        btn_clear.grid(column=3,row=0,columnspan=1,rowspan=1,sticky='NW')
+
+        btn_start=ttk.Button(flog,text='Stop SNMPv3',command=agent)
+        btn_clear.grid(column=4,row=0,columnspan=1,rowspan=1,sticky='NW')
+
+        logs=Tkinter.Text(flog, width=100,height=100,yscrollcommand=True,wrap=Tkinter.WORD)
+        logs.grid(column=0,row=1,columnspan=10)
+
+        # Instert text example.
+        logs.insert(Tkinter.INSERT, "Security is great!")
+        print logs
+
+
+        ############# SNMP config Frame ####################
+
+        lbl2=ttk.Label(fleft,text='LEFT')
+        lbl2.grid(column=0,row=0)
+
+        ############## Punchout EVERYTHING #################
+        nb.add(fhttp,text='Easy HTTPS')
+        nb.add(flog,text='SNMP Logs')
+        nb.add(fsnmp,text='Configure SNMPv3')
+        nb.add(fex,text='Examples')
+
+        fright.columnconfigure(0, weight=1)
+        fright.rowconfigure(0, weight=1)
+        nb.columnconfigure(0, weight=1)
+        nb.rowconfigure(0, weight=1)
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(0, weight=1)
+
+        #nb.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
+
+        root.mainloop()
+
 ###### This is where main should go ########
 if __name__ == '__main__':
-    sagent().run()
-    save_snmp()
+    server_ip='10.5.3.10'
+    '''
+    #httpd_process=multiprocessing.Process(target=httpd,args=(server_ip,))
+    #httpd_process.start()
+    #httpd_process.join()
+    # run as a subprocess
+    # httpd(server_ip)
+    
+    #save_snmp()
+ 
+    # use specific flags or 'all' for full debugging
+    agent.multiprocessing.Process(target=agent,args=(agent(server_ip,
+        server_port='162',
+        snmp_ver='3',
+        community='comm1',
+        authpriv='11',
+        v3auth='sha',
+        v3priv='aes128',
+        user3='user1',
+        authkey3='authkey1',
+        privkey3='privkey1',
+        engineid3='8000000001020304'
+        )))
 
+    agent.start()
+    agent.join()
+    debug.setLogger(debug.Debug('all'))
+    '''
+    gui().run()
+
+'''
     agent(
-        server_ip='10.5.3.10',
+        server_ip,
         server_port='162',
         snmp_ver='3',
         community='comm1',
@@ -354,5 +390,5 @@ if __name__ == '__main__':
         privkey3='privkey1',
         engineid3='8000000001020304'
         )
-    
+''' 
 
