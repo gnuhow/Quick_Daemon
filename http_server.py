@@ -10,6 +10,14 @@ import os
 class Handler(BaseHTTPRequestHandler):
     
     '''
+    # Https server. Allows file download upload to the root program folder.
+
+    # Generate a new server cert:
+    # openssl req -new -x509 -keyout server.pem -out server.pem -days 365 -nodes
+
+    # Verify the server cert:
+    # openssl x509 -in certificate.crt -text -noout
+
     # This is a simple HTTP server.
 def httpd(server_ip):
     certpath=os.path.dirname(os.path.abspath(__file__))+'\\server.pem'
