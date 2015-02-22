@@ -1,0 +1,8 @@
+Python2.7.9
+Tkinter
+pysnmp-4.2.5
+pysnmp-mibs-0.14
+scp-0.8.0
+paramiko
+pip
+netifaces-0.10.4-cp27-none-win_amd64.whl

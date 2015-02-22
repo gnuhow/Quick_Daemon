@@ -1,6 +1,20 @@
 Quick daemon is a SNMPv3 and HTTPS server for receiving logs and transferring files securely with a minimum of setup time. It aims to be cross-platform and should work with Cisco, Juniper, Linux, Windows, Apple etc.
 
-It is liscenced under the Apache liscence.
+Please install Quick Daemon as follows:
+
+Windows:
+Open the executable available on github.
+
+Linux:
+Linux users may install the perquisites with pip and compile from source.
+
+
+
+
+
+
+
+It is liscenced under the Apache licence.
 For questions or feedback, contact gnuhow@gmail.com.
 
 Quick Daemon SNMPv3 and HTTPS Server
