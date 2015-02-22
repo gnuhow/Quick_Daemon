@@ -26,9 +26,8 @@
 # Add a mini firewall?
 # Sanitize inputs.
 # Crossplatform install script.
-# Mac testing.
+# Mac/Chrome OS testing.
 # Do the fills right.
-
 from pysnmp.entity import engine, config
 from pysnmp.carrier.asynsock.dgram import udp
 from pysnmp.entity.rfc3413 import ntfrcv
@@ -47,6 +46,7 @@ import socket
 import re
 import netifaces
 import threading
+import zerorpc
 
 class Qdaemon():
     def __init__(self):
@@ -59,27 +59,6 @@ class Qdaemon():
         s.close()
         #print netifaces.interfaces()
 
-    def save_snmp(self):
-        dd='snmp_log'+str(datetime.datetime.today())
-        print dd
-        self.log_path=tkFileDialog.asksaveasfilename()
-        print self.log_path
-        # print sagent().logs.get()
-        return
-
-
-    def open_snmp(self):
-        print "open_snmp"
-        filename=tkFileDialog.askopenfilename()
-        print filename
-        return
-
-
-    def clear_snmp(self):
-        print "clear_snmp"
-        return
-    # Process the snmp config frame inputs.
-
     ####### The SNMP Agent Daemon #######
     def agent(self,
         server_ip0,server_port0,
@@ -90,7 +69,7 @@ class Qdaemon():
         ):
 
         server_port0=int(server_port0)
-     
+
         # Create SNMP engine with autogenernated engineID and pre-bound
         # to socket transport dispatcher
         snmpEngine = engine.SnmpEngine()
@@ -132,7 +111,6 @@ class Qdaemon():
                     config.usmHMACSHAAuthProtocol, authkey0,
                     config.NoAuthProtocol)
 
-
         ############## SNMPV3 WITH MD5 AUTH AND PRIV ###############
         if snmp_ver0=='3' and authpriv0=='11':
             if v3auth0=='MD5' and v3priv0=='DES':
@@ -171,7 +149,6 @@ class Qdaemon():
                 )
 
         #### SHA AUTH ###
-
             if v3auth0=='SHA' and v3priv0=='DES':
                 config.addV3User(
                     snmpEngine,user0,
@@ -213,7 +190,6 @@ class Qdaemon():
             contextEngineId, contextName,
             varBinds,cbCtx):
         
-            global snmpout
             snmpout='Notification received, ContextEngineId "%s", ContextName "%s"' % (
                 contextEngineId.prettyPrint(), contextName.prettyPrint())
             for name, val in varBinds:
@@ -228,15 +204,52 @@ class Qdaemon():
         # Run I/O dispatcher which would receive queries and send confirmations
         try:
             snmpEngine.transportDispatcher.runDispatcher()
+            print snmpout
             return snmpout
         except:
             print snmpout
             snmpEngine.transportDispatcher.closeDispatcher()
         raise
 
-    '''
-    def startagent(self):
-        
+
+    def save_snmp(self):
+        dd='snmp_log'+str(datetime.datetime.today())
+        #print dd
+        self.log_path=tkFileDialog.asksaveasfilename()
+        #print self.log_path
+        return
+
+
+    def open_snmp(self):
+        print "open_snmp"
+        filename=tkFileDialog.askopenfilename()
+        print filename
+        return
+
+
+    def clear_snmp(self):
+        print "clear_snmp"
+        return
+    # Process the snmp config frame inputs.
+ 
+        '''   
+    def start_agent_thread(self):
+        self.running=True
+        print "starting agent thread"
+        agentthread=threading.Thread(daemon=True,target=self.agent(self.server_ip1,
+            self.server_port1,
+            self.snmp_ver1,
+            self.community1,
+            self.authpriv1,
+            self.v3auth1,
+            self.v3priv1,
+            self.user1,
+            self.authkey1,
+            self.privkey1,
+            self.engineid1))
+        agentthread.start()
+
+    def startagent():
         self.agentd=multiprocessing.Process(name='quickd',target=self.agent,args=(
             '10.5.3.10','162','3',
             'comm1','11','SHA','AES128',
@@ -248,6 +261,8 @@ class Qdaemon():
         
 
         #debug.setLogger(debug.Debug('all'))
+        filex=  
+
         x1=self.server_ip1
         x2=self.server_port1
         x3=self.snmp_ver1
@@ -271,29 +286,52 @@ class Qdaemon():
         print 9,x9
         print 10,x10
         print 11,x11
-
-        child_agentd,parent_agentd=multiprocessing.Pipe(True)
-        agentd=multiprocessing.Process(name='quickd',target=self.agent,args=(
+        
+         agentd=multiprocessing.Process(name='quickd',target=self.agent,args=(
             x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11))
-        agentd.start()
-        child_agentd[0].close()
+        '''
 
-        try:
-            while True:
-                print child_agentd
-        except:
-            print "Finished piping child_agentd."
+    def testpipe(self,
+        server_ip0,server_port0,
+        snmp_ver0,community0,
+        authpriv0,v3auth0,v3priv0,
+        user0,authkey0,privkey0,
+        engineid0='8000000001020304'
+        ):
+        return "Test is successfully."
+
+    def startagent(self):
+        cfgpath=os.path.realpath(__file__)
+        cfgpath=cfgpath+'qdaemon.cfg'
+        cfg=open(cfgpath,'r')
+        cfgread=cfg.read()
+
+        # Parse the text into a list.
+        a=0
+        y=[]
+        x=""
+        for i in cfgread:
+            if i is not ',':
+                x=str(x)+str(i)
+            if i is ',':
+                y.append(str(x))
+                x=""
+
+        #child_agentd,parent_agentd=multiprocessing.Pipe(True) 
+        queue=multiprocessing.Queue()
+        agentd=multiprocessing.Process(name='quickd',target=self.agent,args=(y[0],y[1],y[2],y[3],y[4],y[5],y[6],y[7],y[8],y[9],y[10]))
+        #child_agentd.close()
+        # print parent_agentd.recv()
 
         if agentd.is_alive() is True:
             print 'only one process may be started.'
         else:
+            print "starting"
             agentd.start()
-            print "starting",self.agentd.name, self.agentd.pid
+            print "agentd started"
 
-        print agentd.is_alive()
+        print "agentd.is_alive()",agentd.is_alive()
         #agentd.join()
-    '''
-
 
     def checkagent(self):
         print self.agentd.name, self.agentd.pid, self.agentd.is_alive()
@@ -305,29 +343,26 @@ class Qdaemon():
 
     
     def apply_snmp(self):
-        print "durr"    
-        self.snmp_ver1='3'
-        self.community1='comm1'
-        self.engineid1='8000000001020304'
-
         # Sanatize Inputs
         # IP address
-        print re.match('[0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9]',self.entry_snmp_ip.get())
-
+        #print self.entry_snmp_ip.get()
+        #print re.match([0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9],self.entry_snmp_ip.get())
 
         # NEED TO SANATIZE INPUT w/ warning windows
-        self.user1=self.entry_snmp_user.get()
         self.server_ip1=self.entry_snmp_ip.get()
         self.server_port1=self.entry_snmp_port.get()
-
+        self.snmp_ver1='3'
+        self.community1='comm1'
+        self.user1=self.entry_snmp_user.get()
         self.authkey1=self.entry_snmp_authkey.get()
         self.privkey1=self.entry_snmp_privkey.get()
+        self.engineid1='8000000001020304'
         
         if self.combo_snmp_hash.get() is "noauth" and self.combo_snmp_crypt.get() is not "nopriv":
             print "Must have authentication for private encryption!"
 
         # This section sets the authpriv='11' based on combo boxes.
-        # No sanitization 
+        # No sanitization required.
         if self.combo_snmp_hash.get() is not "noauth":
             self.v3auth1=self.combo_snmp_hash.get()
             if self.combo_snmp_crypt.get() is not "nopriv":
@@ -354,36 +389,39 @@ class Qdaemon():
         
         print "applying snmp config"
 
+        # Write to a file.
+        cfgpath=os.path.realpath(__file__)
+        cfgpath=cfgpath+'qdaemon.cfg'
+        self.saveit=open(cfgpath,'w')
+        self.saveit.truncate()
+        self.saveit.write(self.entry_snmp_ip.get()+',')
+        self.saveit.write(self.server_port1+',')
+        self.saveit.write('3,')
+        self.saveit.write('comm1,')
+        self.saveit.write(self.authpriv1+',')
+        self.saveit.write(self.v3auth1+',')
+        self.saveit.write(self.v3priv1+',')
+        self.saveit.write(self.user1+',')
+        self.saveit.write(self.authkey1+',')
+        self.saveit.write(self.privkey1+',')
+        self.saveit.write('8000000001020304,')
+        self.saveit.close()
+        self.root.quit()
+
 
     def reset_snmp(self):
         print "reset snmp configs"
-
-    def start_agent_thread(self):
-        self.running=True
-        print "starting agent thread"
-        agentthread=threading.Thread(daemon=True,target=self.agent(self.server_ip1,
-            self.server_port1,
-            self.snmp_ver1,
-            self.community1,
-            self.authpriv1,
-            self.v3auth1,
-            self.v3priv1,
-            self.user1,
-            self.authkey1,
-            self.privkey1,
-            self.engineid1))
-        agentthread.start()
 
 
     def gui(self):
         ########### INITALIZE THE TTK GUI with frames and NB ###################
         # Root --> fmain --> fright --> notebook --> widgets
-        root=Tkinter.Tk()
-        root.title('Quick Daemon')
+        self.root=Tkinter.Tk()
+        self.root.title('Quick Daemon')
         
         #fmain=ttk.Frame(root)
         #fmain.grid(column=0,row=0,sticky="NSEW")
-        
+
         #ftop=ttk.Frame(fmain)
         #ftop.grid(column=0,row=0,columnspan=2,rowspan=1,sticky="N")
         #ftop.pack(side=Tkinter.TOP,expand=False,fill=Tkinter.X)
@@ -392,7 +430,7 @@ class Qdaemon():
         #fleft.grid(column=0,row=1,columnspan=1,rowspan=1,sticky='NSWE')
         #fleft.pack(side=Tkinter.LEFT,expand=False,fill=Tkinter.Y)
 
-        fright=ttk.Frame(root)
+        fright=ttk.Frame(self.root)
         #fright.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
         fright.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NWES')
 
@@ -423,7 +461,7 @@ class Qdaemon():
         flog.grid(column=0,row=0,sticky='NWES')
 
         flog_top=ttk.Frame(flog)
-        flog_top.grid(column=0,row=0,sticky='NWES')
+        flog_top.grid(column=0,row=0,sticky='NW')
 
         btn_save=ttk.Button(flog_top,text='Save',command=self.save_snmp)
         btn_save.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
@@ -434,14 +472,14 @@ class Qdaemon():
         btn_clear=ttk.Button(flog_top,text='Clear',command=self.clear_snmp)
         btn_clear.grid(column=2,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        btn_start=ttk.Button(flog_top,text='Start Agent',command=self.start_agent_thread)
-        btn_start.grid(column=3,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        #btn_start=ttk.Button(flog_top,text='Start Agent',command=self.start_agent_thread)
+        #btn_start.grid(column=3,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         btn_stop=ttk.Button(flog_top,text='Check Agent',command=self.checkagent)
         btn_stop.grid(column=4,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        btn_stop=ttk.Button(flog_top,text='Stop Agent',command=self.stopagent)
-        btn_stop.grid(column=5,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        #btn_stop=ttk.Button(flog_top,text='Stop Agent',command=self.stopagent)
+        #btn_stop.grid(column=5,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         # Flog bottom frame
         flog_bot=ttk.Frame(flog)
@@ -553,8 +591,8 @@ class Qdaemon():
         nb.add(fsnmp,text='Configure SNMPv3')
         nb.add(fex,text='Examples')
 
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
         fright.columnconfigure(0, weight=1)
         fright.rowconfigure(0, weight=1)
         nb.columnconfigure(0, weight=1)
@@ -562,20 +600,34 @@ class Qdaemon():
         fex.columnconfigure(0, weight=1)
         fex.rowconfigure(0, weight=1)
         flog.columnconfigure(0, weight=1)
-        flog.rowconfigure(0, weight=1)
+        flog.rowconfigure(0, weight=0)
 
-        flog_bot.columnconfigure(0, weight=2)
-        flog_bot.rowconfigure(0, weight=2)
-        flog_top.rowconfigure(0, weight=0)
-        flog_top.columnconfigure(0, weight=0)
+        flog.columnconfigure(1, weight=1)
+        flog.rowconfigure(1, weight=1)
 
-        root.mainloop()
+        flog_top.rowconfigure(0, weight=1, minsize=20)
+        flog_top.columnconfigure(0, weight=0, minsize=20)
+
+        flog_bot.columnconfigure(0, weight=1)
+        flog_bot.rowconfigure(0, weight=1)
+
+        self.root.mainloop()
 
 
 if __name__ == '__main__':
-    Qdaemon().gui().run()
+    # If a config file exists, start the daemon.
+    cfgpath=os.path.realpath(__file__)
+    cfgpath=cfgpath+'qdaemon.cfg'
+    if os.path.getsize(cfgpath) > 30:
+        Qdaemon().startagent()
+    
+    guid=multiprocessing.Process(name='quickgui',target=Qdaemon().startagent(),args=())
+    guid.start()
+    guid.join()
 
-
+    #Qdaemon().gui().run()
+    
+    
 
 '''
 comments():
