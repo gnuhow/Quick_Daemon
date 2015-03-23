@@ -9,11 +9,6 @@ Linux:
 Linux users may install the perquisites with pip and compile from source.
 
 
-
-
-
-
-
 It is liscenced under the Apache licence.
 For questions or feedback, contact gnuhow@gmail.com.
 
@@ -43,3 +38,14 @@ Add a mini firewall?
 Sanitize inputs.
 Crossplatform install script.
 Mac testing.
+
+----------------SETUP------------------
+install 2.7 with links.
+easy_install pysnmp
+easy_install pysnmp-mibs
+easy_install pycrypto
+pip install paramiko
+pip install zerorpc
+pip install scp
+
+

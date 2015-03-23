@@ -25,15 +25,19 @@
 # Log sorting
 # Filters.
 # add an IP checker
+# OID translation
 # add a SNMP/SCP/HTTPS firewall/port checker.
 # Sanitize inputs.
 # Crossplatform install script.
 # Mac/Chrome OS testing.
 # Clean up the codez + fork the final for a new ui.
+# Paramiko client SCP
+# HTTPS Server ofc
 
 import Tkinter
 import ttk
 import tkFileDialog
+import tkMessageBox
 import time
 
 import multiprocessing
@@ -51,7 +55,7 @@ class Qdaemon():
         # Why is this nearly impossible in Python?
         s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("gmail.com",80))
-        self.outside_ip='10.5.1.156'
+        self.outside_ip='10.5.3.225'
         #self.outside_ip=s.getsockname()[0]
         s.close()
         #print netifaces.interfaces()
@@ -60,7 +64,7 @@ class Qdaemon():
         else:
             self.slash='/'
 
-        self.apply_first=False
+        self.apply_before_agent_start=False
 
 
     def save_snmp(self):
@@ -92,7 +96,7 @@ class Qdaemon():
         log_read=open(self.log_path,'w')
         log_read.close()
 
-        if self.apply_first is False:
+        if self.apply_before_agent_start is False:
             print "Error: please configure and hit apply first."
             return
 
@@ -112,7 +116,8 @@ class Qdaemon():
             "-X",str(self.privkey1),
             "-L",str(self.server_ip1),
             "-e",str(self.engineid1),
-            "-f",str(self.log_path)
+            "-f",str(self.log_path),
+            '-q',
             ))
 
         print agent_cmd
@@ -130,50 +135,148 @@ class Qdaemon():
 
     def readloop(self):
         if self.read_loop_run is True:
-            print "i:", self.i
             self.log_read=open(self.log_path,'r')
             self.logs.delete(1.0,Tkinter.END) 
-            self.logs.insert(Tkinter.INSERT, self.log_read.read())
+            size=os.path.getsize(self.log_path)
+            if size > 100000000:
+                self.log_read.seek(-100000001,2)
+                self.logs.insert(1.0, self.log_read.read(100000000))
+            else: self.logs.insert(1.0, self.log_read.read())
             self.log_read.close()
             self.i=self.i+1
-            #self.root.after_idle(self.readloop())
+            autoscroll=self.autoscroll_state.get()
+            if autoscroll is 1: self.logs.yview(Tkinter.END)
             self.root.after(3000,self.readloop)
+            #print "i:", self.i
+            #self.root.after_idle(self.readloop())
         else: 
-            print "Exit read loop called."
+            print "Agent stopped, Exiting read loop."
             return
 
 
     def checkagent(self):
         print "polling subprocess: ",self.snmp_agent.poll()
+        print "self.read_loop_run", self.read_loop_run
 
 
     def stopagent(self):
         self.read_loop_run=False
-        print "agent stopped"
+        self.snmp_agent.kill()
+        print "attempting to stop agent."
 
+    def error_message(self):
+        tkMessageBox.showerror("Error Message", self.error_dialog)
 
     def apply_snmp(self):
-        # Sanatize Inputs
+        # Validate Inputs
         # IP address
         # print self.entry_snmp_ip.get()
-        # print re.match([0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9],self.entry_snmp_ip.get())
+        # 
 
         # NEED TO SANATIZE INPUT w/ warning windows
         # self.verbose=self.check_snmp_debug.cget()
         # print self.verbose
         # print self.check_snmp_debug.get()
-        self.apply_first=True
+
         self.verbose=str(self.snmp_debug_state.get())
-        self.server_ip1=self.entry_snmp_ip.get()
-        self.server_port1=self.entry_snmp_port.get()
-        self.snmp_ver1='3'
-        self.community1='comm1'
-        self.user1=self.entry_snmp_user.get()
-        self.authkey1=self.entry_snmp_authkey.get()
-        self.privkey1=self.entry_snmp_privkey.get()
-        self.engineid1='8000000001020304'
-        self.log_path=self.entry_log_dir.get()
+
+        # Validate IP address.
+        splits=re.split("\.",self.entry_snmp_ip.get())
+        print len(splits)
+        if len(splits) !=4:
+                self.error_dialog="Please validate the SNMP IP."
+                self.error_message()
+                return
+        else: 
+            for a in splits:
+                if len(a) > 3:
+                    self.error_dialog="Please validate the SNMP IP."
+                    self.error_message()   
+                    return         
+                if re.match('[0-2][0-9][0-9]',a) != None or re.match('[0-9][0-9]',a) != None or re.match('[0-9]',a) != None:
+                    self.server_ip1=self.entry_snmp_ip.get()
+                else:
+                    self.error_dialog="Please validate the SNMP IP."
+                    self.error_message()   
+                    return         
         
+        # Validate port.
+        check=self.entry_snmp_port.get()
+        if len(check) > 5:
+                self.error_dialog="Please validate the SNMP Server Port."
+                self.error_message()   
+                return         
+        else:
+            for a in check:
+                if re.match('[0-9]',a) is None:
+                    self.error_dialog="Please validate the SNMP Server Port."
+                    self.error_message()
+                    return                  
+            self.server_port1=self.entry_snmp_port.get()
+        
+        # Validate Version.
+        self.snmp_ver1='3'
+
+        # Validate Community.
+        self.community1='comm1'
+
+        # Validate user alphanumeric.
+        a=self.entry_snmp_user.get()
+        if len(a) > 50:
+            self.error_dialog="Please enter an alphanumeric username under 50 characters. Underscore is permitted."
+            self.error_message()
+            return       
+        if re.match('\W',a) is not None:
+            self.error_dialog="Please enter an alphanumeric username under 50 characters. Underscore is permitted."
+            self.error_message()
+            return       
+        else: self.user1=self.entry_snmp_user.get()
+        
+        # Validate authkey
+        a=self.entry_snmp_authkey.get()
+        if len(a) > 50 or len(a) <= 6:
+            self.error_dialog="Please enter an alphanumeric authkey under 50 characters and over 6 characters. Underscore is permitted."
+            self.error_message()
+            return       
+        if re.match('\W',a) is not None:
+            self.error_dialog="Please enter an alphanumeric authkey under 50 characters and over 6 characters. Underscore is permitted."
+            self.error_message()
+            return       
+        else: self.authkey1=self.entry_snmp_authkey.get()
+
+        # Validate privkey
+        a=self.entry_snmp_privkey.get()
+        if len(a) > 50 or len(a) <= 6:
+            self.error_dialog="Please enter an alphanumeric authkey under 50 characters and over 6 characters. Underscore is permitted."
+            self.error_message()
+            return       
+        if re.match('\W',a) is not None:
+            self.error_dialog="Please enter an alphanumeric authkey under 50 characters and over 6 characters. Underscore is permitted."
+            self.error_message()
+            return       
+        else: self.privkey1=self.entry_snmp_privkey.get()
+
+        self.engineid1='8000000001020304'
+        
+        # Validate logfile path.
+        print posixpath.normpath(self.entry_log_dir.get())
+
+        safe_string = str()
+            for c in user_supplied_string:
+                if c.isalnum() or c in [' ','.','/']:
+                    safe_string = safe_string + c
+
+        try:
+            open(self.entry_log_dir.get()+'test.txt', 'r').close()
+            os.unlink(self.entry_log_dir.get())
+            self.log_path=self.entry_log_dir.get()
+            print('Filename is valid.')
+        except OSError:
+            print('Filename is not valid.')
+            self.error_dialog="Filename is not valid."
+            self.error_message()
+            return       
+
         if self.combo_snmp_hash.get() is "noauth" and self.combo_snmp_crypt.get() is not "nopriv":
             print "Must have authentication for private encryption!"
 
@@ -190,8 +293,10 @@ class Qdaemon():
         if self.combo_snmp_hash is "noauth":
             self.authpriv1='00'
         #print "Saving snmp config to file."
+        self.apply_before_agent_start=True
 
-        # Write to a file.
+        '''
+        # Write to a file. Not a good idea to saving passwords in cleartext.
         cfgpath=os.path.dirname(os.path.realpath(__file__))
         cfgpath=cfgpath+self.slash+'qdaemon.cfg'
         self.saveit=open(cfgpath,'w')
@@ -210,7 +315,7 @@ class Qdaemon():
         self.saveit.write('8000000001020304,')
         self.saveit.close()
         #self.root.quit()
-
+        '''
 
     def reset_snmp(self):
         print "reset snmp configs"
@@ -254,6 +359,11 @@ class Qdaemon():
         #nb.pack(side=Tkinter.RIGHT,expand=True,fill=Tkinter.BOTH)
         nb.grid(column=0,row=0,padx=10,pady=10,sticky='NWES') 
 
+        ################### SCP Client Frame ##############
+        frame_scp=ttk.Frame(nb)
+        frame_scp.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
+
+
         ############## HTTPS Server Frame ##################
         fhttp=ttk.Frame(nb)
         fhttp.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
@@ -275,13 +385,18 @@ class Qdaemon():
         btn_stop=ttk.Button(flog_top,text='Stop Agent',command=self.stopagent)
         btn_stop.grid(column=5,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
+        self.autoscroll_state=Tkinter.IntVar()
+        self.check_autoscroll=ttk.Checkbutton(flog_top,text='Auto Scroll',variable=self.autoscroll_state)
+        self.check_autoscroll.grid(column=6,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        self.check_autoscroll.invoke()
+
         # Flog bottom frame
         flog_bot=ttk.Frame(flog)
-        flog_bot.grid(column=0,row=1,sticky='NWES')
+        flog_bot.grid(column=0,row=1,sticky='NWES',columnspan=99)
 
         self.logs=Tkinter.Text(flog_bot, width=80,height=30,padx=5,pady=5,wrap=Tkinter.WORD)
         self.log_scrollbar=Tkinter.Scrollbar(flog_bot)       
-        self.logs.grid(column=0,row=0,sticky='NWES',padx=0,pady=0)
+        self.logs.grid(column=0,row=0,sticky='NWES',padx=0,pady=0,columnspan=99)
         self.log_scrollbar.grid(column=1,row=0,sticky='NES',padx=0,pady=0)
         self.log_scrollbar.config(command=self.logs.yview)
         self.logs.config(yscrollcommand=self.log_scrollbar.set)
@@ -294,7 +409,7 @@ class Qdaemon():
 
         ############# SNMP config Frame ####################
         fsnmp=ttk.Frame(nb)
-        fsnmp.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
+        fsnmp.grid(column=0,row=0,padx=0,pady=0,sticky='NWES')
 
         lbl_snmp_ver=ttk.Label(fsnmp,text='SNMP Version')
         lbl_snmp_ver.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
@@ -389,12 +504,12 @@ class Qdaemon():
         btn_save.grid(column=1,row=9,columnspan=1,rowspan=1,sticky='NS',padx=5,pady=5)
 
         default_log_dir=os.path.dirname(os.path.realpath(__file__))+self.slash+"snmp-"+str(time.strftime("%d-%m-%Y-%H-%M-%S"))+".log"
-        self.entry_log_dir=ttk.Entry(fsnmp)
-        self.entry_log_dir.grid(column=3,row=9,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        self.entry_log_dir=ttk.Entry(fsnmp,width=90)
+        self.entry_log_dir.grid(column=0,row=10,columnspan=99,rowspan=1,sticky='NWES',padx=5,pady=5)
         self.entry_log_dir.insert(0,default_log_dir)
 
         btn_apply=ttk.Button(fsnmp,text='Apply & Save',command=self.apply_snmp)
-        btn_apply.grid(column=1,row=10,columnspan=1,rowspan=1,sticky='NWES',padx=10,pady=10)
+        btn_apply.grid(column=1,row=11,columnspan=1,rowspan=1,sticky='NS',padx=10,pady=10)
 
         ############### Examples ###########################
         fex=ttk.Frame(nb)
@@ -402,44 +517,58 @@ class Qdaemon():
         fex.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
 
         # #ftop.pack(side=Tkinter.TOP,expand=False,fill=Tkinter.X)
-        text_fex=Tkinter.Text(fex,padx=5,pady=5,yscrollcommand=True,wrap=Tkinter.WORD)
+        self.text_fex=Tkinter.Text(fex,padx=5,pady=5,yscrollcommand=True,wrap=Tkinter.WORD)
         #text_fex.pack(side=Tkinter.LEFT,expand=True,fill=Tkinter.BOTH)
-        text_fex.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=0,pady=0)    
-        
-        examplestr=string.join((
-            ' Cisco IOS 12.4',
+        self.text_fex.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=0,pady=0)       
+        self.examplestr=string.join((
+            'Cisco IOS 12.4 with SCP',
             'username qdaemon secret 123456', 
             'crypto key generate mod 1024',
             'line vty 0 4',
             'transport input ssh',
             'login local',
             'ip scp server enable',
-            'ip scp server enable',
             ' ', 
-            'snmp-server group V3Group v3 auth read V3Read write V3Write',
-            'snmp-server user <user> V3Group v3 priv sha <authkey> priv AES 256 <privkey>',
+            'Cisco IOS 12.4 with SNMPv3',
+            'snmp-server group qdaemon v3 priv read',
+            'snmp-server user <user> <V3Group> v3 auth sha <authkey> priv AES 128 <privkey>',
             'snmp-server view V3Write iso included',
             'snmp-server view V3Read iso included', 
             'snmp-server host <IP_address> version 3 auth V3User', 
             'snmp-server enable traps all',
             ' ',
-            'Cisco ASA',
-            'username qdaemon password 123456',
+            'Cisco ASA with SCP',
+            'username <user> password <pass>',
             'crypto key generate mod 1024',
-            'ssh <qdaemon_ip>',
+            'ssh <qdaemon local ip>',
             'scp server enable', 
-            'scp server enable',
+            ' ',
+            'Cisco ASA with SNMPv3 authPriv',
+            'snmp-server group qdaemon v3 priv read',
+            'snmp-server user <user> qdaemon v3 auth sha <authkey1> priv AES 128 <privkey1>',
+            'snmp-server host <interface> <agent-ip> version 3 <user> udp-port 162',
+            'snmp-server contact <email>',
+            'snmp-server enable traps all',
+            'snmp-server enable traps syslog',
+            # Set the logging level; 0 is critical and 7 is debugging.
+            'logging history <0-7>',
             ' ',
             'Linux, CentOS 7',
             'su',
             'yum install net-snmp',
             'useradd qdaemon password 123456'
             ),'\n')
-        text_fex.insert(Tkinter.INSERT,examplestr)
-       
+
+        self.text_fex.insert(Tkinter.INSERT,self.examplestr)       
+        self.fex_scrollbar=Tkinter.Scrollbar(fex)       
+        self.fex_scrollbar.grid(column=1,row=0,sticky='NES',padx=0,pady=0)
+        self.fex_scrollbar.config(command=self.text_fex.yview)
+        self.text_fex.config(yscrollcommand=self.fex_scrollbar.set)
+
 
         ############## Punchout EVERYTHING #################
-        nb.add(fhttp,text='Easy HTTPS')
+        nb.add(frame_scp,text="SCP Files")
+        nb.add(fhttp,text='HTTPS Files')
         nb.add(flog,text='Secure Logs')
         nb.add(fsnmp,text='Configure SNMP Agent')
         nb.add(fex,text='Examples')
@@ -464,9 +593,13 @@ class Qdaemon():
         flog_bot.columnconfigure(0, weight=1)
         flog_bot.rowconfigure(0, weight=1)
 
-        self.root.mainloop()
+        try:
+            self.root.mainloop()
+        except:
+            self.read_loop_run=False
+            self.snmp_agent.kill()
 
 
 if __name__ == '__main__':
     Qdaemon().gui().run()
-    
+ 

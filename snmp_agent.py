@@ -11,7 +11,7 @@ import time
 import string
 
 ####### The SNMP Agent Daemon #######
-def agent(verbose,server_ip0,server_port0,
+def agent(verbose,quiet,server_ip0,server_port0,
     snmp_ver0,community0,
     authpriv0,v3auth0,v3priv0,
     user0,authkey0,privkey0,filepath0,
@@ -31,6 +31,7 @@ def agent(verbose,server_ip0,server_port0,
         udp.UdpTransport().openServerMode((server_ip0, server_port0))
         )
 
+    # This if tree sorts out the command line options into pysnmp commands.
     ########################## SNMP VERSION ONE/TWO ###########################
     if snmp_ver0=='1':
         config.CommunityData(community0, 1)
@@ -141,18 +142,21 @@ def agent(verbose,server_ip0,server_port0,
         varBinds,cbCtx):
 
         saveit=open(filepath0,'a')
-        output1=string.join((str(time.strftime("%d/%m/%Y-%H:%M:%S")),
-            'Notification received, ContextEngineId',
-            'ContextName ',contextEngineId.prettyPrint(),
-            contextName.prettyPrint(),'\n'))
-        print output1
+        saveit.write("----------------------------------- \n")
+        output1=string.join(('Notification received:',
+            str(time.strftime("%d/%m/%Y-%H:%M:%S")),'\n'
+            'ContextEngineId:',contextEngineId.prettyPrint(),'\n'
+            'ContextName:',contextName.prettyPrint(),'\n'))
+        if quiet!=True:
+            print output1
         saveit.write(output1)
 
-        #print output1
         for name, val in varBinds:
             output2='%s = %s \n' % (name.prettyPrint(), val.prettyPrint())
             saveit.write(output2)
-            #print output2
+            if quiet!=True:
+                print output2
+        saveit.write('\n')
         saveit.close()
 
     # Register SNMP Application at the SNMP engine
@@ -200,6 +204,7 @@ if __name__ == '__main__':
         required=False,help='SNMP engine id')
     parser.add_argument('-f',dest='filepath',action='store',
         required=True,help='File location for storing SNMP trap events.')
+    parser.add_argument('-q','--quiet',dest='quiet',action='store_true',required=False,help='Disable noisy output.')
 
     args=parser.parse_args()
     # Default settings.
@@ -211,24 +216,9 @@ if __name__ == '__main__':
     #    args.community,args.authpriv,args.auth_hash,args.priv_enc,args.user,
     #    args.authkey,args.privkey,args.filepath,args.engineid)
 
-    agent(args.verbose,args.server_ip,args.server_port,args.version,args.community,args.authpriv,
+    agent(args.verbose,args.quiet,args.server_ip,args.server_port,args.version,args.community,args.authpriv,
             args.auth_hash,args.priv_enc,args.user,args.authkey,
-            args.privkey,args.filepath,args.engineid)
+            args.privkey,args.filepath,args.engineid,)
 
     # snmptrap -v 3 -a SHA -A authkey1 -u user -l authPriv -x AES -X privkey1 -L o: 10.5.1.156 163 1.3.6.1.6.3.1.1.5.1
-
-    '''
-    parser.add_argument('verbose',metavar='verbosity',type=str,help='Ultraverbose mode for debugging.')
-    parser.add_argument('server_ip',metavar='server ip',type=str,help='Local Server IP')
-    parser.add_argument('server_port',metavar='port',type=str,help='UDP Server Port')
-    parser.add_argument('version',type=str,help='SNMP version: 1,2c or 3')
-    parser.add_argument('community',metavar='community',type=str,help='Community for SMPv1 and v2')
-    parser.add_argument('authpriv',metavar='authpriv',type=str,help='11 for authpriv or 00 for noauthnopriv')
-    parser.add_argument('auth_hash',metavar='auth_hash',type=str,help='Hash type: MD5 or SHA')
-    parser.add_argument('priv_enc',metavar='priv_enc',type=str,help='Priv encryption: DES, 3DES, AES128 or AES256')
-    parser.add_argument('user',metavar='user',type=str,help='Username')
-    parser.add_argument('authkey',metavar='authkey',type=str,help='Authentication hash key')
-    parser.add_argument('privkey',metavar='privkey',type=str,help='Priv encryption key')
-    parser.add_argument('engineid',metavar='engineid',type=str,help='SNMP engine id.')
-    '''
 
