@@ -258,9 +258,9 @@ class Qdaemon():
 
         self.engineid1='8000000001020304'
         
+        '''
         # Validate logfile path.
         print posixpath.normpath(self.entry_log_dir.get())
-
         safe_string = str()
             for c in user_supplied_string:
                 if c.isalnum() or c in [' ','.','/']:
@@ -276,7 +276,8 @@ class Qdaemon():
             self.error_dialog="Filename is not valid."
             self.error_message()
             return       
-
+        '''
+        
         if self.combo_snmp_hash.get() is "noauth" and self.combo_snmp_crypt.get() is not "nopriv":
             print "Must have authentication for private encryption!"
 
