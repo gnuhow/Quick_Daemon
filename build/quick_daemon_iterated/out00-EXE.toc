@@ -1,0 +1,9 @@
+('C:\\Users\\user\\Documents\\GitHub\\Quick_Daemon\\build\\quick_daemon_iterated\\quick_daemon_iterated.exe',
+ True,
+ False,
+ None,
+ None,
+ [],
+ None,
+ False,
+ 1428199637L)

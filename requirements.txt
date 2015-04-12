@@ -9,5 +9,6 @@ pysnmp-mibs-0.14
 scp-0.8.0
 paramiko
 netifaces-0.10.4-cp27-none-win_amd64.whl
+Pyinstaller
 
 
