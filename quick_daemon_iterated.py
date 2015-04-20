@@ -1,7 +1,7 @@
 #! /bin/bash/python2
 
 # Quick Daemon SNMPv3 and HTTPS Server
-# Easy graphical tools for sysadmins and network professionals.
+# Easy graphical tools for sysadmin and networking professionals.
 # This is intended to be an easy and secure replacement for tftp servers and syslog servers.
 # SNMP 3 only
 
@@ -22,17 +22,12 @@
 ################ TODO ##################
 # SNMP Write to file
 # HTTPS Server or SCP transfer
-# Log sorting
-# Filters.
-# add an IP checker
+# Log sorting + Filters
 # OID translation
-# add a SNMP/SCP/HTTPS firewall/port checker.
-# Sanitize inputs.
+# add a SNMP/SCP/HTTPS firewall/port checker. netst -ano | grep 22
 # Crossplatform install script.
 # Mac/Chrome OS testing.
-# Clean up the codez + fork the final for a new ui.
-# Paramiko client SCP
-# HTTPS Server ofc
+# HTTPS PUT reciever, so hard.
 
 # GUI IMPORTS
 import Tkinter
@@ -57,10 +52,21 @@ from scp import SCPClient
 class Qdaemon():
     def __init__(self):
         # Get the local IP address.
-        # Why is this nearly impossible in Python?
+        self.localip=[]
+        interfaces = netifaces.interfaces()
+        for i in interfaces:
+            if i == 'lo':
+                continue
+            iface = netifaces.ifaddresses(i).get(netifaces.AF_INET)
+            if iface != None:
+                for j in iface:
+                    #print j['addr']
+                    self.localip.append(j['addr'])
+
+
         s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("gmail.com",80))
-        self.outside_ip='10.5.3.10'
+        self.outside_ip=''
         #self.outside_ip=s.getsockname()[0]
         s.close()
         #print netifaces.interfaces()
@@ -68,11 +74,12 @@ class Qdaemon():
             self.slash='\\'
         else:
             self.slash='/'
-
         self.apply_before_agent_start=False
+
 
     def scp_local(self):
         return
+
 
     def scpvalid(self):
         self.scp_valid=False
@@ -85,12 +92,12 @@ class Qdaemon():
                 self.error_message()
                 return
         else: 
-            for a in splits:
-                if len(a)>3:
+            for i in splits:
+                if len(i)>3:
                     self.error_dialog="Please validate the remote IP."
                     self.error_message()   
                     return         
-                if re.match('[0-2][0-9][0-9]',a) != None or re.match('[0-9][0-9]',a) != None or re.match('[0-9]',a) != None:
+                if re.match('[0-2][0-9][0-9]',i) != None or re.match('[0-9][0-9]',i) != None or re.match('[0-9]',i) != None:
                     self.scp_ip=a
                 else:
                     self.error_dialog="Please validate the remote IP."
@@ -149,21 +156,12 @@ class Qdaemon():
                 self.error_dialog="Please enter a valid filename."
                 self.error_message()
                 return
-        
+ 
         directory=filename[0:b-1]
-        print directory
         if not os.path.isdir(directory):
             self.error_dialog="That directory does not exist."
             self.error_message()
             return
-        else:
-            try:
-                test=open(filename, 'w').close()
-                os.unlink(filename)
-            except OSError:
-                self.error_dialog="Please enter a valid filename."
-                self.error_message()
-                return
         self.scp_lfile=filename
 
         # Validate remote path.
@@ -178,34 +176,23 @@ class Qdaemon():
                 self.error_dialog="Please enter a valid filename."
                 self.error_message()
                 return
-        
-        directory=filename[0:b]
-        if not os.path.isdir(directory):
-            self.error_dialog="That directory does not exist."
-            self.error_message()
-            return
-        else:
-            try:
-                test=open(filename, 'w').close()
-                os.unlink(filename)
-            except OSError:
-                self.error_dialog="Please enter a valid filename."
-                self.error_message()
-                return
+       
         self.scp_rfile=filename        
         self.scp_valid=True
 
 
     def scpput(self): 
-        # python scp_put_d.py -i 10.5.3.1 -l adm -P 1234qwer 
+        # python scp_put_d.py -i 10.5.3.1 -l adm -P 123456
         #    -L C:\Users\user\Documents\GitHub\Quick_Daemon\AUTHORS.txt -r disk0:/AUTHORS.txt
         #
+        # C:\Users\user\Documents\GitHub\Quick_Daemon>python quick_daemon_iterated.py
+        # python scpput.py -i 10.5.3.1 -p 22 -l adm -P **** -L C:\Users\user\Documents\GitHub\Quick_Daemon\local.file -r disk0:/remote-name.bin
         # ARPARSE CANT HANDLE THE ^ CHARACTER!
         # Make sure to log out of SSH sessions first!
         self.scpvalid()
         if self.scp_valid is False:
             return
-        cmd=string.join(("python scp_put_d.py",
+        cmd=string.join(("python scpput.py",
             "-i",str(self.scp_ip),
             "-p",str(self.scp_port),
             "-l",str(self.scp_user),
@@ -213,14 +200,90 @@ class Qdaemon():
             "-L",str(self.scp_lfile),
             "-r",str(self.scp_rfile),
             ))
-        print agent_cmd
-        self.scputd=subprocess.Popen(cmd,shell=True,stderr=subprocess.STDOUT)
-        # self.gui.update()
+        
+        # Try to run scp command, except with error output into the log.
+        try: 
+            self.scputd=subprocess.check_output(cmd,shell=True,stderr=subprocess.STDOUT)
+            # Make a record in the log
+            message=string.join(("Secure upload to",
+                "user",str(self.scp_user),
+                "@",str(self.scp_ip),
+                "port",str(self.scp_port),
+                "\nLocal File:",str(self.scp_lfile),
+                "\nRemote File:",str(self.scp_rfile),
+                "\n\n",
+                ))
+            self.scp_log.insert(Tkinter.INSERT,message)
+        except subprocess.CalledProcessError as e:
+            #output the last element of the error
+            message_=e.output.split('\n')[-2]
+            a=0
+            b=len(message_)
+            for i in message_:
+                a+=1
+                if i is ":":
+                    message=message_[a:b]+"\n\n"
+            self.scp_log.insert(Tkinter.INSERT,message)
+        return
 
 
     def scpget(self):
+        # python scp_put_d.py -i 10.5.3.1 -l adm -P 1234qwer 
+        #    -L C:\Users\user\Documents\GitHub\Quick_Daemon\AUTHORS.txt -r disk0:/AUTHORS.txt
+        #
+        # C:\Users\user\Documents\GitHub\Quick_Daemon>python quick_daemon_iterated.py
+        # python scpput.py -i 10.5.3.1 -p 22 -l adm -P 1234qwer -L C:\Users\user\Documents\GitHub\Quick_Daemon\local.file -r disk0:/remote-name.bin
+        # ARGPARSE CANT HANDLE THE ^ CHARACTER!
+        # Make sure to log out of SSH sessions first!
+        self.scpvalid()
+        if self.scp_valid is False:
+            return
+        cmd=string.join(("python scpget.py",
+            "-i",str(self.scp_ip),
+            "-p",str(self.scp_port),
+            "-l",str(self.scp_user),
+            "-P",str(self.scp_pass),
+            "-L",str(self.scp_lfile),
+            "-r",str(self.scp_rfile),
+            ))
+        
+        # Try to run scp command, except with error output into the log.
+        try: 
+            self.scputd=subprocess.check_output(cmd,shell=True,stderr=subprocess.STDOUT)
+            # Make a record in the log
+            message=string.join(("Secure download from",
+                "user",str(self.scp_user),
+                "@",str(self.scp_ip),
+                "port",str(self.scp_port),
+                "\nLocal File:",str(self.scp_lfile),
+                "\nRemote File:",str(self.scp_rfile),
+                "\n\n",
+                ))
+            self.scp_log.insert(Tkinter.INSERT,message)
+        except subprocess.CalledProcessError as e:
+            #output the last element of the error
+            message_=e.output.split('\n')[-2]
+            a=0
+            b=len(message_)
+            for i in message_:
+                a+=1
+                if i is ":":
+                    message=message_[a:b]+"\n\n"
+            self.scp_log.insert(Tkinter.INSERT,message)
         return
 
+
+    def httpput():
+        pass
+
+
+    def httpget():
+        pass
+
+    def snmp_ip_combo(self):
+        ip=self.combo_snmp_ip.get()
+
+        return
 
     def save_snmp(self):
         #dd=str(datetime.datetime.today())
@@ -245,16 +308,16 @@ class Qdaemon():
 
     def startagent(self):
         # python snmp_agent.py 0 10.5.1.156 162 3 comm1 11 SHA AES256 user1 authkey1 privkey1 8000000001020304
-        # agent_cmd="python snmp_agent.py "+self.verbose+" "+self.server_ip1+" "+self.server_port1+" "+self.snmp_ver1+" "+self.community1+" "+self.authpriv1+" "+self.v3auth1+" "+self.v3priv1+" "+self.user1+" "+self.authkey1+" "+self.privkey1+" "+self.engineid1
-
+        # agent_cmd="python snmp_agent.py "+self.verbose+" "+self.server_ip1+" "+self.server_port1+" "+self.snmp_ver1+" "+self.community1+" "+self.authpriv1+" "+self.v3auth1+" "+self.v3priv1+" "+self.user1+" "+self.authkey1+" "+self.privkey1+" "+self.engineid
         # Create the file to deal with opening errors.
-        log_read=open(self.log_path,'w')
-        log_read.close()
 
         if self.apply_before_agent_start is False:
             self.error_dialog="Please configure the SNMP agent before starting."
             self.error_message()
             return
+
+        log_read=open(self.log_path,'w')
+        log_read.close()
 
         if self.verbose==1:
             verb_flag="--verbose"
@@ -275,18 +338,17 @@ class Qdaemon():
             "-f",str(self.log_path),
             '-q',
             ))
-
-        print agent_cmd
+        #print agent_cmd
         self.snmp_agent=subprocess.Popen(agent_cmd,shell=True,stderr=subprocess.STDOUT)
         # self.gui.update()
-
-        print "Starting event loop."
+        #print "Starting event loop."
         self.read_loop_run=True
         self.i=0
         self.log_read=open(self.log_path,'r')
         self.logs.delete(1.0,Tkinter.END)
         self.readloop()
         self.log_read.close()
+
 
     def configureagent(self):
         self.win_configure=Tkinter.Toplevel(self.root)
@@ -310,12 +372,15 @@ class Qdaemon():
         lbl_snmp_ip=ttk.Label(fsnmp,text='Agent IP ')
         lbl_snmp_ip.grid(column=0,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        self.entry_snmp_ip=ttk.Entry(fsnmp)
-        self.entry_snmp_ip.grid(column=1,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
-        self.entry_snmp_ip.insert(0,self.outside_ip)
+        #self.entry_snmp_ip=ttk.Entry(fsnmp)
+        #self.entry_snmp_ip.grid(column=1,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        #self.entry_snmp_ip.insert(0,self.outside_ip)
 
-        lbl_snmp_ip2=ttk.Label(fsnmp,text='Enter your local IP, ie 192.168.1.10.')
-        lbl_snmp_ip2.grid(column=3,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)        
+        self.combo_snmp_ip_val=str()
+        self.combo_snmp_ip=ttk.Combobox(fsnmp,textvariable=self.combo_snmp_ip_val)
+        self.combo_snmp_ip['values']=self.localip
+        self.combo_snmp_ip.grid(column=1,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        self.combo_snmp_ip.insert(0,"")
 
         lbl_snmp_port=ttk.Label(fsnmp,text='Port')
         lbl_snmp_port.grid(column=0,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
@@ -324,7 +389,7 @@ class Qdaemon():
         self.entry_snmp_port.grid(column=1,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
         self.entry_snmp_port.insert(0,'162')
 
-        lbl_snmp_port2=ttk.Label(fsnmp,text='Port 162 is default for traps.')
+        lbl_snmp_port2=ttk.Label(fsnmp,text='Port 162 is default for SNMP traps.')
         lbl_snmp_port2.grid(column=3,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         lbl_snmp_user=ttk.Label(fsnmp,text='Username')
@@ -413,22 +478,29 @@ class Qdaemon():
             #print "i:", self.i
             #self.root.after_idle(self.readloop())
         else: 
-            print "Agent stopped, Exiting read loop."
+            #print "Agent stopped, Exiting read loop."
             return
 
 
     def checkagent(self):
-        print "polling subprocess: ",self.snmp_agent.poll()
-        print "self.read_loop_run", self.read_loop_run
+        self.error_dialog="polling subprocess: "+self.snmp_agent.poll()+"\nread_loop_run" +self.read_loop_run
+        self.error_message()
 
 
     def stopagent(self):
         self.read_loop_run=False
-        self.snmp_agent.kill()
-        print "attempting to stop agent."
+        try:
+            self.snmp_agent.kill()
+            self.error_dialog="Agent Stopped"
+            self.error_message()
+        except:
+            self.error_dialog="Unable to stop the agent."
+            self.error_message()
+
 
     def error_message(self):
         tkMessageBox.showerror("Error Message", self.error_dialog)
+
 
     def apply_snmp(self):
         # Validate Inputs
@@ -443,7 +515,7 @@ class Qdaemon():
         self.verbose=str(self.snmp_debug_state.get())
 
         # Validate IP address.
-        splits=re.split("\.",self.entry_snmp_ip.get())
+        splits=re.split("\.",self.combo_snmp_ip.get())
         #print len(splits)
         if len(splits)!=4:
                 self.error_dialog="Please validate the SNMP IP."
@@ -456,7 +528,7 @@ class Qdaemon():
                     self.error_message()   
                     return         
                 if re.match('[0-2][0-9][0-9]',a) != None or re.match('[0-9][0-9]',a) != None or re.match('[0-9]',a) != None:
-                    self.server_ip1=self.entry_snmp_ip.get()
+                    self.server_ip1=self.combo_snmp_ip.get()
                 else:
                     self.error_dialog="Please validate the SNMP IP."
                     self.error_message()   
@@ -593,6 +665,7 @@ class Qdaemon():
         #self.root.quit()
         '''
 
+
     def reset_snmp(self):
         print "reset snmp configs"
 
@@ -644,21 +717,20 @@ class Qdaemon():
 
         self.entry_scp_user=ttk.Entry(frame_scp)
         self.entry_scp_user.grid(column=1,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
-        self.entry_scp_user.insert(0,'adm')
+
 
         lbl_scp_pass=ttk.Label(frame_scp,text='Password')
         lbl_scp_pass.grid(column=2,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)        
 
+        self.entry_scp_pass=ttk.Entry(frame_scp,show='*')
         self.entry_scp_pass=ttk.Entry(frame_scp)
         self.entry_scp_pass.grid(column=3,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
-        self.entry_scp_pass.insert(0,'1234qwer')
 
         lbl_scpip=ttk.Label(frame_scp,text='Remote IP')
         lbl_scpip.grid(column=0,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         self.entry_scp_ip=ttk.Entry(frame_scp)
         self.entry_scp_ip.grid(column=1,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
-        self.entry_scp_ip.insert(0,'10.5.3.1')
 
         lbl_scp_port=ttk.Label(frame_scp,text='Remote Port')
         lbl_scp_port.grid(column=2,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)        
@@ -672,7 +744,7 @@ class Qdaemon():
 
         self.entry_rfile=ttk.Entry(frame_scp)
         self.entry_rfile.grid(column=1,row=3,columnspan=3,rowspan=1,sticky='NWES',padx=5,pady=5)
-        self.entry_rfile.insert(0,'file0:/remote-name.bin')        
+        self.entry_rfile.insert(0,'disk0:/remote-name.bin')        
 
         lbl_scp_lfile=ttk.Label(frame_scp,text='Local filepath:')
         lbl_scp_lfile.grid(column=0,row=4,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)  
@@ -685,26 +757,26 @@ class Qdaemon():
         self.entry_lfile.grid(column=1,row=4,columnspan=3,rowspan=1,sticky='NWES',padx=5,pady=5)
         self.entry_lfile.insert(0,scp_default_local) 
 
-        scp_btn_save=ttk.Button(frame_scp,text='Upload!',command=self.scpput)
+        scp_btn_save=ttk.Button(frame_scp,text='Upload',command=self.scpput)
         scp_btn_save.grid(column=1,row=5,columnspan=1,rowspan=1,sticky='NS',padx=5,pady=5)
 
-        scp_btn_save=ttk.Button(frame_scp,text='Download!',command=self.scpget)
+        scp_btn_save=ttk.Button(frame_scp,text='Download',command=self.scpget)
         scp_btn_save.grid(column=2,row=5,columnspan=1,rowspan=1,sticky='NS',padx=5,pady=5)
 
         frame_scp_log=ttk.Frame(frame_scp)
-        frame_scp_log.grid(column=0,row=8,sticky='NWES',columnspan=99)
+        frame_scp_log.grid(column=0,row=99,sticky='NWES',columnspan=99)
 
-        scp_log=Tkinter.Text(frame_scp_log, width=80,height=30,padx=5,pady=5,wrap=Tkinter.WORD)
-        scp_log_scrollbar=Tkinter.Scrollbar(frame_scp_log)       
-        scp_log.grid(column=0,row=0,sticky='NWES',padx=0,pady=0,columnspan=99)
-        scp_log_scrollbar.grid(column=1,row=0,sticky='NES',padx=0,pady=0)
-        scp_log_scrollbar.config(command=scp_log.yview)
-        scp_log.config(yscrollcommand=scp_log_scrollbar.set)   
-        scp_log.insert(Tkinter.INSERT, "This is the SCP file transfer history.")
+        self.scp_log=Tkinter.Text(frame_scp_log, width=80,height=30,padx=5,pady=5,wrap=Tkinter.WORD)
+        self.scp_log_scrollbar=Tkinter.Scrollbar(frame_scp_log)
+        self.scp_log.grid(column=0,row=0,sticky='NWES',padx=0,pady=0,columnspan=1)
+        self.scp_log_scrollbar.grid(column=1,row=0,sticky='NES',padx=0,pady=0)
+        self.scp_log_scrollbar.config(command=self.scp_log.yview)
+        self.scp_log.config(yscrollcommand=self.scp_log_scrollbar.set) 
+        self.scp_log.insert(Tkinter.INSERT, "This is the SCP file transfer history. \n\n")
 
         ############## HTTPS Server Frame ##################
-        fhttp=ttk.Frame(nb)
-        fhttp.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
+        #fhttp=ttk.Frame(nb)
+        #fhttp.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
 
         ############## SNMP LOG FRAME ################
         flog=ttk.Frame(nb)
@@ -713,13 +785,13 @@ class Qdaemon():
         flog_top=ttk.Frame(flog)
         flog_top.grid(column=0,row=0,sticky='NW')
 
-        btn_start=ttk.Button(flog_top,text='Start Agent',command=self.startagent)
+        btn_start=ttk.Button(flog_top,text='2) Start Agent',command=self.startagent)
         btn_start.grid(column=3,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        btn_stop=ttk.Button(flog_top,text='Check Agent',command=self.checkagent)
+        btn_stop=ttk.Button(flog_top,text='3) Check Agent',command=self.checkagent)
         btn_stop.grid(column=4,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        btn_stop=ttk.Button(flog_top,text='Stop Agent',command=self.stopagent)
+        btn_stop=ttk.Button(flog_top,text='4) Stop Agent',command=self.stopagent)
         btn_stop.grid(column=5,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         self.autoscroll_state=Tkinter.IntVar()
@@ -727,8 +799,8 @@ class Qdaemon():
         self.check_autoscroll.grid(column=7,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
         self.check_autoscroll.invoke()
 
-        btn_stop=ttk.Button(flog_top,text='Configure',command=self.configureagent)
-        btn_stop.grid(column=6,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
+        btn_stop=ttk.Button(flog_top,text='1) Configure',command=self.configureagent)
+        btn_stop.grid(column=2,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         # Flog bottom frame
         flog_bot=ttk.Frame(flog)
@@ -742,7 +814,7 @@ class Qdaemon():
         self.logs.config(yscrollcommand=self.log_scrollbar.set)
 
         # logs insert example       
-        self.logs.insert(Tkinter.INSERT, "Security is great!")
+        self.logs.insert(Tkinter.INSERT, "SNMPv3 Messages will appear here.")
 
         # Insert text example.
         # print self.logs
@@ -757,7 +829,7 @@ class Qdaemon():
         #text_fex.pack(side=Tkinter.LEFT,expand=True,fill=Tkinter.BOTH)
         self.text_fex.grid(column=0,row=0,columnspan=1,rowspan=1,sticky='NWES',padx=0,pady=0)       
         self.examplestr=string.join((
-            'Cisco IOS 12.4 with SCP',
+            'Cisco IOS 12.4 SCP Server',
             'username qdaemon secret 123456', 
             'crypto key generate mod 1024',
             'line vty 0 4',
@@ -773,7 +845,7 @@ class Qdaemon():
             'snmp-server host <IP_address> version 3 auth V3User', 
             'snmp-server enable traps all',
             ' ',
-            'Cisco ASA with SCP',
+            'Cisco ASA SCP Server',
             'username <user> password <pass>',
             'crypto key generate mod 1024',
             'ssh <qdaemon local ip>',
@@ -789,10 +861,17 @@ class Qdaemon():
             # Set the logging level; 0 is critical and 7 is debugging.
             'logging history <0-7>',
             ' ',
-            'Linux, CentOS 7',
+            'Linux CentOS 7 SNMPv3 Trap',
             'su',
             'yum install net-snmp',
-            'useradd qdaemon password 123456'
+            'useradd qdaemon',
+            'snmptrap -v 3 -a SHA -A <authkey1> -u <user1> -l authPriv -x AES -X privkey1 -L o: <agent ip> 162 1.3.6.1.6.3.1.1.5.1 '
+            '# engineID 8000000001020304'
+            ' ',
+            'Linux CentOS 7 SCP Server',
+            'yum install openssh',
+            'useradd qdaemon',
+            'service openssh start',
             ),'\n')
 
         self.text_fex.insert(Tkinter.INSERT,self.examplestr)       
@@ -803,9 +882,9 @@ class Qdaemon():
 
 
         ############## Punchout EVERYTHING #################
-        nb.add(frame_scp,text="SCP Files")
-        nb.add(fhttp,text='HTTPS Files')
-        nb.add(flog,text='Secure Logs')
+        nb.add(frame_scp,text="SCP File Transfer")
+        #nb.add(fhttp,text='HTTPS Files')
+        nb.add(flog,text='Secure SNMPv3 Logs')
         nb.add(fex,text='Examples')
 
         self.root.columnconfigure(0, weight=1)
@@ -854,7 +933,7 @@ import pycrypto
 import crypto
 import scp
 
-#--------------scp------------------
+#--------------scp import for compiler ------------------
 from paramiko import AutoAddPolicy
 from paramiko import SSHClient
 from scp import SCPClient
