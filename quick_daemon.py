@@ -1,52 +1,50 @@
 #! /bin/bash/python2
+import multiprocessing
+import os
+import subprocess
+import socket
+import re
+# bug with pyinstaller compiler
+import netifaces
+#pyinstaller bug
+import pkg_resources
+import string
 
-# Quick Daemon SNMPv3 and HTTPS Server
-# Easy graphical tools for sysadmin and networking professionals.
-# This is intended to be an easy and secure replacement for tftp servers and syslog servers.
-# SNMP 3 only
-
-# Primary maintiainer Zachery H Sawyer.
-# First release date: 3/14/2015
-# Platform: Windows.
-
-# Example client on Centos 7 w/ net-snmp:
-# snmptrap -v 3 -a MD5 -A authkey -u user1 -l authPriv -x DES -X privkey1 -L o: 10.5.1.30 162 1.3.6.1.6.3.1.1.5.1
-# snmptrap -v 3 -a SHA -A authkey -u user -l authPriv -x AES -X privkey -L o: 10.5.1.156 162 1.3.6.1.6.3.1.1.5.1
-
-# GOALS
-# 1. Secure only.
-# 2. Simple to use. (I may add auto configure for certain platforms).
-# 3. Open source.
-# 4. Cross platform.
-
-################ TODO ##################
-# SNMP Write to file
-# HTTPS Server or SCP transfer
-# Log sorting + Filters
-# OID translation
-# add a SNMP/SCP/HTTPS firewall/port checker. netst -ano | grep 22
-# Crossplatform install script.
-# Mac/Chrome OS testing.
-# HTTPS PUT reciever, so hard.
-
-# GUI IMPORTS
 import Tkinter
 import ttk
 import tkFileDialog
 import tkMessageBox
 import time
 
-import multiprocessing
-import os
-import subprocess
-import socket
-import re
-import netifaces
-import string
-
-# SCP IMPORTS
+#--------------scp import ------------------
+import paramiko
+from paramiko import AutoAddPolicy
 from paramiko import SSHClient
 from scp import SCPClient
+import scp
+import os
+import argparse
+import time
+import string
+import scp
+
+def norun():
+    #------------snmp agent import for compiler----------
+    import snmp_agent
+    from pysnmp.entity import engine, config
+    from pysnmp.carrier.asynsock.dgram import udp
+    from pysnmp.entity.rfc3413 import ntfrcv
+    from pysnmp.proto.api import v2c
+    from pysnmp import debug
+
+    import os
+    import argparse
+    import time
+    import string
+    import pycrypto
+    import crypto
+    return
+
 
 
 class Qdaemon():
@@ -62,14 +60,7 @@ class Qdaemon():
                 for j in iface:
                     #print j['addr']
                     self.localip.append(j['addr'])
-
-
-        s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("gmail.com",80))
         self.outside_ip=''
-        #self.outside_ip=s.getsockname()[0]
-        s.close()
-        #print netifaces.interfaces()
         if os.name == 'nt':
             self.slash='\\'
         else:
@@ -78,6 +69,12 @@ class Qdaemon():
 
 
     def scp_local(self):
+        #dd=str(datetime.datetime.today())
+        self.scp_local_path=tkFileDialog.askopenfilename()
+        if len(self.scp_local_path) > 2:
+            self.entry_lfile.delete(0,254)
+            self.entry_lfile.insert(0,self.scp_local_path)
+        #print self.log_path
         return
 
 
@@ -120,29 +117,19 @@ class Qdaemon():
 
         # Validate user alphanumeric.
         a=self.entry_scp_user.get()
-        if len(a)>50:
-            self.error_dialog="Please enter an alphanumeric username under 50 characters. Underscore is permitted."
+        if len(a)>500:
+            self.error_dialog="Please enter a username under 500 characters."
             self.error_message()
             return   
-        for i in a:    
-            if re.match('\W',a) is not None:
-                self.error_dialog="Please enter an alphanumeric username under 50 characters. Underscore is permitted."
-                self.error_message()
-                return       
-            else: self.scp_user=a
+        else: self.scp_user=a
 
         # Validate password
         a=self.entry_scp_pass.get()
-        if len(a) > 50 or len(a) <= 6:
-            self.error_dialog="Please enter an alphanumeric password under 50 characters and over 6 characters. Underscore is permitted."
+        if len(a) > 500:
+            self.error_dialog="Please enter under 500 characters."
             self.error_message()
             return       
-        for i in a:   
-            if re.match('\W',a) is not None:
-                self.error_dialog="Please enter an alphanumeric password under 50 characters and over 6 characters. Underscore is permitted."
-                self.error_message()
-                return       
-            else: self.scp_pass=self.entry_scp_pass.get()
+        self.scp_pass=self.entry_scp_pass.get()
 
         # Validate local path.
         filename=self.entry_lfile.get()
@@ -156,12 +143,6 @@ class Qdaemon():
                 self.error_dialog="Please enter a valid filename."
                 self.error_message()
                 return
- 
-        directory=filename[0:b-1]
-        if not os.path.isdir(directory):
-            self.error_dialog="That directory does not exist."
-            self.error_message()
-            return
         self.scp_lfile=filename
 
         # Validate remote path.
@@ -181,95 +162,120 @@ class Qdaemon():
         self.scp_valid=True
 
 
-    def scpput(self): 
-        # python scp_put_d.py -i 10.5.3.1 -l adm -P 123456
-        #    -L C:\Users\user\Documents\GitHub\Quick_Daemon\AUTHORS.txt -r disk0:/AUTHORS.txt
-        #
-        # C:\Users\user\Documents\GitHub\Quick_Daemon>python quick_daemon_iterated.py
-        # python scpput.py -i 10.5.3.1 -p 22 -l adm -P **** -L C:\Users\user\Documents\GitHub\Quick_Daemon\local.file -r disk0:/remote-name.bin
-        # ARPARSE CANT HANDLE THE ^ CHARACTER!
-        # Make sure to log out of SSH sessions first!
+    def scpput(self):
         self.scpvalid()
         if self.scp_valid is False:
             return
-        cmd=string.join(("python scpput.py",
-            "-i",str(self.scp_ip),
-            "-p",str(self.scp_port),
-            "-l",str(self.scp_user),
-            "-P",str(self.scp_pass),
-            "-L",str(self.scp_lfile),
-            "-r",str(self.scp_rfile),
-            ))
-        
-        # Try to run scp command, except with error output into the log.
-        try: 
-            self.scputd=subprocess.check_output(cmd,shell=True,stderr=subprocess.STDOUT)
-            # Make a record in the log
+        #self.bar_scp.start()
+        self.scp_log.insert("1.0",'\n')
+        try:            
+            ssh=SSHClient()
+            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            ssh.load_system_host_keys()
+            ssh.connect(self.scp_ip,port=int(self.scp_port),username=self.scp_user,
+                password=self.scp_pass,gss_auth=False,gss_deleg_creds=False)
+            scp_=SCPClient(ssh.get_transport())
+            scp_.put(self.scp_lfile,self.scp_rfile)
             message=string.join(("Secure upload to",
                 "user",str(self.scp_user),
                 "@",str(self.scp_ip),
                 "port",str(self.scp_port),
                 "\nLocal File:",str(self.scp_lfile),
                 "\nRemote File:",str(self.scp_rfile),
-                "\n\n",
+                "\n",
                 ))
+            self.scp_log.insert('1.0',message)
+        except paramiko.AuthenticationException:
+            message="SSH Error: Authentication Error, please check username and password. \n\n"
+            self.scp_log.insert('1.0',message)
+        except paramiko.ssh_exception.BadHostKeyException, msg:
+            message="SSH Error: Invalid Host keys. Delete the correct system host keys."+str(msg)+"\n\n"
+            self.scp_log.insert('1.0',message)
+        except paramiko.ssh_exception.ChannelException:
+            message="SSH Error: SSH Failed, Channel Exception."+str(msg)+"\n\n"
+            self.scp_log.insert('1.0',message)
+        except paramiko.ssh_exception.PasswordRequiredException:
+            message="SSH Error: Password required."+str(msg)+"\n\n"
             self.scp_log.insert(Tkinter.INSERT,message)
-        except subprocess.CalledProcessError as e:
-            #output the last element of the error
-            message_=e.output.split('\n')[-2]
-            a=0
-            b=len(message_)
-            for i in message_:
-                a+=1
-                if i is ":":
-                    message=message_[a:b]+"\n\n"
-            self.scp_log.insert(Tkinter.INSERT,message)
+        except paramiko.ssh_exception.PartialAuthentication:
+            message="SSH Error: partial authentication."+str(msg)+"\n\n"
+            self.scp_log.insert('1.0',message)
+
+        except scp.SCPException, msg:
+            message="SCP Error: "+str(msg)+"\n\n"
+            self.scp_log.insert('1.0',message)
+        except:
+            message="Uknown error."+"\n\n"
+            self.scp_log.insert('1.0',message)
+        #self.bar_scp.stop()
         return
 
 
     def scpget(self):
-        # python scp_put_d.py -i 10.5.3.1 -l adm -P 1234qwer 
-        #    -L C:\Users\user\Documents\GitHub\Quick_Daemon\AUTHORS.txt -r disk0:/AUTHORS.txt
-        #
-        # C:\Users\user\Documents\GitHub\Quick_Daemon>python quick_daemon_iterated.py
-        # python scpput.py -i 10.5.3.1 -p 22 -l adm -P 1234qwer -L C:\Users\user\Documents\GitHub\Quick_Daemon\local.file -r disk0:/remote-name.bin
-        # ARGPARSE CANT HANDLE THE ^ CHARACTER!
-        # Make sure to log out of SSH sessions first!
         self.scpvalid()
         if self.scp_valid is False:
             return
-        cmd=string.join(("python scpget.py",
-            "-i",str(self.scp_ip),
-            "-p",str(self.scp_port),
-            "-l",str(self.scp_user),
-            "-P",str(self.scp_pass),
-            "-L",str(self.scp_lfile),
-            "-r",str(self.scp_rfile),
-            ))
-        
-        # Try to run scp command, except with error output into the log.
-        try: 
-            self.scputd=subprocess.check_output(cmd,shell=True,stderr=subprocess.STDOUT)
-            # Make a record in the log
+        #self.bar_scp.start()
+        self.scp_log.insert('1.0',"\n\n")
+        try:           
+            ssh=SSHClient()
+            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            ssh.load_system_host_keys()
+            ssh.connect(self.scp_ip,port=int(self.scp_port),username=self.scp_user,
+                password=self.scp_pass,gss_auth=False,gss_deleg_creds=False)
+            scp_=SCPClient(ssh.get_transport())
+            scp_.get(self.scp_rfile,self.scp_lfile)
             message=string.join(("Secure download from",
                 "user",str(self.scp_user),
                 "@",str(self.scp_ip),
                 "port",str(self.scp_port),
                 "\nLocal File:",str(self.scp_lfile),
                 "\nRemote File:",str(self.scp_rfile),
-                "\n\n",
+                "\n",
                 ))
-            self.scp_log.insert(Tkinter.INSERT,message)
-        except subprocess.CalledProcessError as e:
-            #output the last element of the error
-            message_=e.output.split('\n')[-2]
-            a=0
-            b=len(message_)
-            for i in message_:
-                a+=1
-                if i is ":":
-                    message=message_[a:b]+"\n\n"
-            self.scp_log.insert(Tkinter.INSERT,message)
+            self.scp_log.insert('1.0',message)
+        except paramiko.AuthenticationException:
+            message="SSH Error: Authentication Error, please check username and password. \n\n"
+            self.scp_log.insert('1.0',message)
+        except paramiko.ssh_exception.BadHostKeyException, msg:
+            message="SSH Error: Invalid Host keys. Delete the correct system host keys."+str(msg)+"\n\n"
+            self.scp_log.insert('1.0',message)
+        except paramiko.ssh_exception.ChannelException:
+            message="SSH Error: SSH Failed, Channel Exception."+str(msg)+"\n"
+            self.scp_log.insert('1.0',message)
+        except paramiko.ssh_exception.PasswordRequiredException:
+            message="SSH Error: Password required."+str(msg)+"\n"
+            self.scp_log.insert("1.0",message)
+        except paramiko.ssh_exception.PartialAuthentication:
+            message="SSH Error: partial authentication."+str(msg)+"\n"
+            self.scp_log.insert('1.0',message)
+        except scp.SCPException, msg:
+            message="SCP Error: "+str(msg)+"\n"
+            self.scp_log.insert('1.0',message)
+        except scp.RuntimeError, msg:
+            message="SCP Error: "+str(msg)+"\n"
+            self.scp_log.insert('1.0',message)
+        except scp.SCPTimeoutError, msg:
+            message="SCP Error: "+str(msg)+"\n"
+            self.scp_log.insert('1.0',message)
+        except scp.SCPError, msg:
+            message="SCP Error: "+str(msg)+"\n"
+            self.scp_log.insert('1.0',message)
+        except:
+            message="Uknowm SCP transfer error."+"\n"
+            self.scp_log.insert('1.0',message)
+        #self.bar_scp.stop()
+        return
+
+
+    # this is the loading bar + window for the scp transfer.
+    def scp_waiting(self):
+        self.bar_scp.start()
+        return
+
+
+    def scp_waiting_stop(self):
+        self.bar_scp.stop()
         return
 
 
@@ -280,10 +286,11 @@ class Qdaemon():
     def httpget():
         pass
 
+
     def snmp_ip_combo(self):
         ip=self.combo_snmp_ip.get()
-
         return
+
 
     def save_snmp(self):
         #dd=str(datetime.datetime.today())
@@ -307,10 +314,9 @@ class Qdaemon():
 
 
     def startagent(self):
-        # python snmp_agent.py 0 10.5.1.156 162 3 comm1 11 SHA AES256 user1 authkey1 privkey1 8000000001020304
+        # python snmp_agent.exe 0 10.5.3.10 162 3 comm1 11 SHA AES256 user1 authkey1 privkey1 8000000001020304
         # agent_cmd="python snmp_agent.py "+self.verbose+" "+self.server_ip1+" "+self.server_port1+" "+self.snmp_ver1+" "+self.community1+" "+self.authpriv1+" "+self.v3auth1+" "+self.v3priv1+" "+self.user1+" "+self.authkey1+" "+self.privkey1+" "+self.engineid
         # Create the file to deal with opening errors.
-
         if self.apply_before_agent_start is False:
             self.error_dialog="Please configure the SNMP agent before starting."
             self.error_message()
@@ -321,10 +327,27 @@ class Qdaemon():
 
         if self.verbose==1:
             verb_flag="--verbose"
-        else: 
+        else:
             verb_flag=""
-
         #snmptrap -v 3 -a SHA -A authkey1 -u user -l authPriv -x AES -X privkey1 -L 10.5.1.156 <engine> <file>
+        '''
+        if os.name == 'nt':
+            # snmp_agent.exe -v 3 -a SHA -A authkey1 -u user -l 11 -x AES -X privkey1 -L 10.5.3.10 -f snmptest.log
+            agent_cmd=string.join(("snmp_agent.exe",verb_flag,
+                "-v",str(self.snmp_ver1),
+                "-a",str(self.v3auth1),
+                "-A",str(self.authkey1),
+                "-u",str(self.user1),
+                "-l",str(self.authpriv1),
+                "-x",str(self.v3priv1),
+                "-X",str(self.privkey1),
+                "-L",str(self.server_ip1),
+                "-e",str(self.engineid1),
+                "-f",str(self.log_path),
+                '-q',
+                ))
+        '''
+        # python snmp_agent.py -v 3 -a SHA -A authkey1 -u user -l 11 -x AES -X privkey1 -L 10.5.3.10 -f snmptest.log
         agent_cmd=string.join(("python snmp_agent.py",verb_flag,
             "-v",str(self.snmp_ver1),
             "-a",str(self.v3auth1),
@@ -338,16 +361,25 @@ class Qdaemon():
             "-f",str(self.log_path),
             '-q',
             ))
-        #print agent_cmd
-        self.snmp_agent=subprocess.Popen(agent_cmd,shell=True,stderr=subprocess.STDOUT)
-        # self.gui.update()
-        #print "Starting event loop."
-        self.read_loop_run=True
-        self.i=0
-        self.log_read=open(self.log_path,'r')
-        self.logs.delete(1.0,Tkinter.END)
-        self.readloop()
-        self.log_read.close()
+        # Try to run scp command, except with error output into the log.
+        try: 
+            self.snmp_agent=subprocess.Popen(agent_cmd,shell=True,stderr=subprocess.STDOUT)
+            #print agent_cmd       
+            # self.gui.update()
+            #print "Starting event loop."
+            self.read_loop_run=True
+            self.i=0
+            self.log_read=open(self.log_path,'r')
+            self.logs.delete('1.0',Tkinter.END)
+            msg="Starting the SNMP agent."
+            self.scp_log.insert("1.0",msg)
+            self.readloop()
+            self.log_read.close()
+        except subprocess.CalledProcessError as e:
+            #output the last line of the error
+            message=e.output.split('\n')[-2]+"\n"+e.output.split('\n')[-1]+"\n\n"
+            self.scp_log.insert(Tkinter.INSERT,message)
+        return
 
 
     def configureagent(self):
@@ -474,6 +506,8 @@ class Qdaemon():
             self.i=self.i+1
             autoscroll=self.autoscroll_state.get()
             if autoscroll is 1: self.logs.yview(Tkinter.END)
+
+            # Delay mechanism to prevent freezing
             self.root.after(3000,self.readloop)
             #print "i:", self.i
             #self.root.after_idle(self.readloop())
@@ -483,19 +517,33 @@ class Qdaemon():
 
 
     def checkagent(self):
-        self.error_dialog="polling subprocess: "+self.snmp_agent.poll()+"\nread_loop_run" +self.read_loop_run
+        if self.snmp_agent.poll() == None:
+            agent_check="OK"
+        else:
+            agent_check="Stopped"
+
+        self.error_dialog="SNMP Agent running: "+agent_check+"\nLog server running: " +str(self.read_loop_run)
         self.error_message()
 
 
     def stopagent(self):
-        self.read_loop_run=False
-        try:
-            self.snmp_agent.kill()
-            self.error_dialog="Agent Stopped"
+        if self.snmp_agent.poll() != None:
+            self.error_dialog="Agent already stopped!"
             self.error_message()
-        except:
-            self.error_dialog="Unable to stop the agent."
+            return
+        if self.read_loop_run == False:
+            self.error_dialog="Log server already stopped!"
             self.error_message()
+        else:
+            self.read_loop_run=False
+            try:
+                self.snmp_agent.kill()
+                self.error_dialog="Agent Stopped"
+                self.error_message()
+            except:
+                self.error_dialog="Unable to stop the agent."
+                self.error_message()
+        
 
 
     def error_message(self):
@@ -513,9 +561,8 @@ class Qdaemon():
         # print self.check_snmp_debug.get()
 
         self.verbose=str(self.snmp_debug_state.get())
-
         # Validate IP address.
-        splits=re.split("\.",self.combo_snmp_ip.get())
+        splits=re.split("\.",self.entry_snmp_ip.get())
         #print len(splits)
         if len(splits)!=4:
                 self.error_dialog="Please validate the SNMP IP."
@@ -528,7 +575,7 @@ class Qdaemon():
                     self.error_message()   
                     return         
                 if re.match('[0-2][0-9][0-9]',a) != None or re.match('[0-9][0-9]',a) != None or re.match('[0-9]',a) != None:
-                    self.server_ip1=self.combo_snmp_ip.get()
+                    self.server_ip1=self.entry_snmp_ip.get()
                 else:
                     self.error_dialog="Please validate the SNMP IP."
                     self.error_message()   
@@ -644,7 +691,7 @@ class Qdaemon():
         self.win_configure.destroy()
 
         '''
-        # Write to a file. Not a good idea to saving is passwords in cleartext.
+        # Write to a file. Not a good idea to save passwords in cleartext.
         cfgpath=os.path.dirname(os.path.realpath(__file__))
         cfgpath=cfgpath+self.slash+'qdaemon.cfg'
         self.saveit=open(cfgpath,'w')
@@ -712,56 +759,60 @@ class Qdaemon():
         frame_scp=ttk.Frame(nb)
         frame_scp.grid(column=0,row=0,padx=20,pady=20,sticky='NWES')
 
-        lbl_scp_user=ttk.Label(frame_scp,text='Username')
+        frame_scp_top=ttk.Frame(frame_scp)
+        frame_scp_top.grid(column=0,row=0,padx=0,pady=0,sticky='NWES')
+
+        lbl_scp_user=ttk.Label(frame_scp_top,text='Username')
         lbl_scp_user.grid(column=0,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        self.entry_scp_user=ttk.Entry(frame_scp)
+        self.entry_scp_user=ttk.Entry(frame_scp_top)
         self.entry_scp_user.grid(column=1,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-
-        lbl_scp_pass=ttk.Label(frame_scp,text='Password')
+        lbl_scp_pass=ttk.Label(frame_scp_top,text='Password')
         lbl_scp_pass.grid(column=2,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)        
 
-        self.entry_scp_pass=ttk.Entry(frame_scp,show='*')
-        self.entry_scp_pass=ttk.Entry(frame_scp)
+        self.entry_scp_pass=ttk.Entry(frame_scp_top,show='*')
         self.entry_scp_pass.grid(column=3,row=1,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        lbl_scpip=ttk.Label(frame_scp,text='Remote IP')
+        lbl_scpip=ttk.Label(frame_scp_top,text='Remote IP')
         lbl_scpip.grid(column=0,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        self.entry_scp_ip=ttk.Entry(frame_scp)
+        self.entry_scp_ip=ttk.Entry(frame_scp_top)
         self.entry_scp_ip.grid(column=1,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
-        lbl_scp_port=ttk.Label(frame_scp,text='Remote Port')
+        lbl_scp_port=ttk.Label(frame_scp_top,text='Remote Port')
         lbl_scp_port.grid(column=2,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)        
 
-        self.entry_scp_port=ttk.Entry(frame_scp)
+        self.entry_scp_port=ttk.Entry(frame_scp_top)
         self.entry_scp_port.grid(column=3,row=2,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
         self.entry_scp_port.insert(0,'22')
 
-        lbl_scp_rfile=ttk.Label(frame_scp,text='Remote filepath:')
+        lbl_scp_rfile=ttk.Label(frame_scp_top,text='Remote filepath:')
         lbl_scp_rfile.grid(column=0,row=3,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)  
 
-        self.entry_rfile=ttk.Entry(frame_scp)
+        self.entry_rfile=ttk.Entry(frame_scp_top)
         self.entry_rfile.grid(column=1,row=3,columnspan=3,rowspan=1,sticky='NWES',padx=5,pady=5)
-        self.entry_rfile.insert(0,'disk0:/remote-name.bin')        
+        self.entry_rfile.insert(0,'flash:/remote.file')        
 
-        lbl_scp_lfile=ttk.Label(frame_scp,text='Local filepath:')
+        lbl_scp_lfile=ttk.Label(frame_scp_top,text='Local filepath:')
         lbl_scp_lfile.grid(column=0,row=4,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)  
 
-        scp_btn_save=ttk.Button(frame_scp,text='Browse',command=self.scp_local)
+        scp_btn_save=ttk.Button(frame_scp_top,text='Browse',command=self.scp_local)
         scp_btn_save.grid(column=0,row=5,columnspan=1,rowspan=1,sticky='NS',padx=5,pady=5)
 
         scp_default_local=os.path.dirname(os.path.realpath(__file__))+self.slash+"local.file"
-        self.entry_lfile=ttk.Entry(frame_scp)
+        self.entry_lfile=ttk.Entry(frame_scp_top)
         self.entry_lfile.grid(column=1,row=4,columnspan=3,rowspan=1,sticky='NWES',padx=5,pady=5)
         self.entry_lfile.insert(0,scp_default_local) 
 
-        scp_btn_save=ttk.Button(frame_scp,text='Upload',command=self.scpput)
+        scp_btn_save=ttk.Button(frame_scp_top,text='Upload',command=self.scpput)
         scp_btn_save.grid(column=1,row=5,columnspan=1,rowspan=1,sticky='NS',padx=5,pady=5)
 
-        scp_btn_save=ttk.Button(frame_scp,text='Download',command=self.scpget)
+        scp_btn_save=ttk.Button(frame_scp_top,text='Download',command=self.scpget)
         scp_btn_save.grid(column=2,row=5,columnspan=1,rowspan=1,sticky='NS',padx=5,pady=5)
+
+        #self.bar_scp=ttk.Progressbar(frame_scp_top,mode='indeterminate')
+        #self.bar_scp.grid(column=3,row=5,columnspan=1,rowspan=1,sticky='NWES',padx=5,pady=5)
 
         frame_scp_log=ttk.Frame(frame_scp)
         frame_scp_log.grid(column=0,row=99,sticky='NWES',columnspan=99)
@@ -772,7 +823,7 @@ class Qdaemon():
         self.scp_log_scrollbar.grid(column=1,row=0,sticky='NES',padx=0,pady=0)
         self.scp_log_scrollbar.config(command=self.scp_log.yview)
         self.scp_log.config(yscrollcommand=self.scp_log_scrollbar.set) 
-        self.scp_log.insert(Tkinter.INSERT, "This is the SCP file transfer history. \n\n")
+        self.scp_log.insert("1.0", "This is the SCP file transfer history. \n\n")
 
         ############## HTTPS Server Frame ##################
         #fhttp=ttk.Frame(nb)
@@ -868,6 +919,7 @@ class Qdaemon():
             'snmptrap -v 3 -a SHA -A <authkey1> -u <user1> -l authPriv -x AES -X privkey1 -L o: <agent ip> 162 1.3.6.1.6.3.1.1.5.1 '
             '# engineID 8000000001020304'
             ' ',
+            " ",
             'Linux CentOS 7 SCP Server',
             'yum install openssh',
             'useradd qdaemon',
@@ -907,6 +959,15 @@ class Qdaemon():
         flog_bot.columnconfigure(0, weight=1)
         flog_bot.rowconfigure(0, weight=1)
 
+        frame_scp.columnconfigure(1, weight=1)
+        frame_scp.rowconfigure(1, weight=1)
+
+        frame_scp_top.columnconfigure(0, weight=1)
+        frame_scp_top.rowconfigure(0, weight=1)
+
+        frame_scp_log.columnconfigure(0, weight=1)
+        frame_scp_log.rowconfigure(0, weight=1)
+
         try:
             self.root.mainloop()
         except:
@@ -916,31 +977,3 @@ class Qdaemon():
 if __name__ == '__main__':
     Qdaemon().gui().run()
  
-
- #------------snmp agent import for compiler----------
-import snmp_agent
-from pysnmp.entity import engine, config
-from pysnmp.carrier.asynsock.dgram import udp
-from pysnmp.entity.rfc3413 import ntfrcv
-from pysnmp.proto.api import v2c
-from pysnmp import debug
-
-import os
-import argparse
-import time
-import string
-import pycrypto
-import crypto
-import scp
-
-#--------------scp import for compiler ------------------
-from paramiko import AutoAddPolicy
-from paramiko import SSHClient
-from scp import SCPClient
-import os
-import argparse
-import time
-import string
-
-
-
